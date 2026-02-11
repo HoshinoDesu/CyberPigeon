@@ -2,6 +2,10 @@
 
 一个简单的短信转发工具，基于 ModemManager 开发，支持将短信转发到多种通知渠道。
 
+## 界面预览
+
+![Web UI](img/ui.png)
+
 ## 功能特性
 
 - 支持多种转发接通道：Email, Bark, Gotify, ServerChan, Webhook。
