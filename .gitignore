@@ -1,0 +1,25 @@
+# 二进制文件
+sms-forwarder
+*.exe
+
+# 配置文件
+config.toml
+
+# 数据文件
+sms.json
+*.db
+
+# 日志
+*.log
+
+# Go
+*.test
+*.out
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

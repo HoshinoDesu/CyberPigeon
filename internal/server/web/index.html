@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Forwarder</title>
+    <script>
+        // 在页面渲染前立即设置主题，避免闪烁
+        (function () {
+            const theme = localStorage.getItem('theme') || 'auto';
+            let actualTheme = theme;
+            if (theme === 'auto') {
+                actualTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', actualTheme);
+        })();
+    </script>
+    <script src="vue.global.js"></script>
+    <style>
+        :root {
+            /* 深色主题 */
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-tertiary: #0f0f0f;
+            --border-primary: #1a1a1a;
+            --border-secondary: #333;
+            --text-primary: #ffffff;
+            --text-secondary: #ccc;
+            --text-tertiary: #666;
+            --accent-primary: #4fc3f7;
+            --accent-secondary: #81d4fa;
+            --status-success: #00e676;
+            --signal-excellent: #00e676;
+            --signal-good: #76ff03;
+            --signal-fair: #ffea00;
+            --signal-poor: #ff9800;
+            --signal-none: #757575;
+            --error-bg: #1a0000;
+            --error-border: #330000;
+            --error-text: #ff5252;
+        }
+
+        [data-theme="light"] {
+            /* 浅色主题 */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #eeeeee;
+            --border-primary: #e0e0e0;
+            --border-secondary: #bdbdbd;
+            --text-primary: #000000;
+            --text-secondary: #424242;
+            --text-tertiary: #9e9e9e;
+            --accent-primary: #0288d1;
+            --accent-secondary: #0277bd;
+            --status-success: #00c853;
+            --signal-excellent: #00c853;
+            --signal-good: #64dd17;
+            --signal-fair: #ffc107;
+            --signal-poor: #ff6f00;
+            --signal-none: #9e9e9e;
+            --error-bg: #ffebee;
+            --error-border: #ef5350;
+            --error-text: #c62828;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        [v-cloak] {
+            display: none !important;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* 顶部栏 */
+        .topbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--status-success);
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-secondary);
+            color: var(--text-tertiary);
+            padding: 6px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .modem-toggle {
+            background: transparent;
+            border: 1px solid var(--border-secondary);
+            color: var(--text-tertiary);
+            padding: 6px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .modem-toggle:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .modem-toggle.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: var(--bg-primary);
+        }
+
+        /* TAB 标签页 */
+        .sidebar-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-tertiary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+
+        .sidebar-tab.active {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+            background: var(--bg-secondary);
+        }
+
+        /* Modem 侧边栏 */
+        .modem-sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 380px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-primary);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modem-sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* 推送通道编辑 */
+        .channel-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .channel-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-tertiary);
+        }
+
+        .channel-empty-text {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .channel-empty-hint {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            opacity: 0.7;
+        }
+
+        .channel-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .channel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        .channel-type {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .channel-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: var(--accent-primary);
+            color: white;
+            border-radius: 2px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .channel-enabled {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .channel-enabled input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .channel-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .field-label {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .field-input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 13px;
+            transition: border-color 0.2s;
+        }
+
+        .field-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .field-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .save-channels-btn {
+            position: sticky;
+            bottom: 0;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: opacity 0.2s;
+        }
+
+        .save-channels-btn:hover {
+            opacity: 0.9;
+        }
+
+        .save-channels-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .test-channel-btn {
+            background: transparent;
+            border: 1px solid var(--accent-primary);
+            color: var(--accent-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            margin-left: 8px;
+        }
+
+        .test-channel-btn:hover {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .test-channel-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-tertiary);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .modem-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .modem-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .modem-details {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .detail-label {
+            color: var(--text-tertiary);
+        }
+
+        .detail-value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .signal-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-top: 10px;
+            margin-top: 10px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .signal-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--border-primary);
+            position: relative;
+        }
+
+        .signal-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .signal-excellent {
+            background: var(--signal-excellent);
+        }
+
+        .signal-good {
+            background: var(--signal-good);
+        }
+
+        .signal-fair {
+            background: var(--signal-fair);
+        }
+
+        .signal-poor {
+            background: var(--signal-poor);
+        }
+
+        .signal-none {
+            background: var(--signal-none);
+        }
+
+        .signal-percent {
+            font-size: 13px;
+            font-weight: 600;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        /* USSD 区域 */
+        .ussd-section {
+            background: transparent;
+            border: none;
+            border-top: 1px solid var(--border-primary);
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+
+        .ussd-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .ussd-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .ussd-input {
+            flex: 1;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .ussd-btn {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 0 16px;
+            font-size: 13px;
+            cursor: pointer;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .ussd-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .ussd-result {
+            margin-top: 12px;
+            padding: 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .messages-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .messages-header {
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .messages-title {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .message-count {
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .message-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-left: 2px solid var(--accent-primary);
+            padding: 24px;
+            margin-bottom: 1px;
+            transition: background 0.2s;
+        }
+
+        .message-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            gap: 20px;
+        }
+
+        .message-sender {
+            flex: 1;
+        }
+
+        .sender-number {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .sender-device {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .message-timestamp {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            white-space: nowrap;
+        }
+
+        .message-body {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: 1px solid var(--border-secondary);
+            color: var(--text-tertiary);
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            border-color: #ff5252;
+            color: #ff5252;
+        }
+
+        /* 搜索框 */
+        .search-box {
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            padding: 10px 16px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        /* 确认对话框 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .modal-message {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 8px 20px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid var(--border-secondary);
+            background: transparent;
+            color: var(--text-primary);
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .modal-btn:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .modal-btn.danger {
+            border-color: #ff5252;
+            color: #ff5252;
+        }
+
+        .modal-btn.danger:hover {
+            background: #ff5252;
+            color: white;
+        }
+
+        /* 加载和空状态 */
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 20px;
+            color: var(--text-tertiary);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--border-primary);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            font-size: 13px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-tertiary);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        .empty-text {
+            font-size: 14px;
+        }
+
+        .error-state {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+            padding: 20px;
+            margin: 20px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-tertiary);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .topbar {
+                padding: 12px 16px;
+            }
+
+            .logo {
+                font-size: 16px;
+            }
+
+            .status-text {
+                display: none;
+            }
+
+            .modem-sidebar {
+                width: 100%;
+            }
+
+            .messages-container {
+                padding: 16px;
+            }
+
+            .message-item {
+                padding: 16px;
+            }
+
+            .message-header {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" v-cloak>
+        <div class="app">
+            <!-- 顶部栏 -->
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="logo">SMS FORWARDER</div>
+                </div>
+                <div class="topbar-right">
+                    <div class="status-text" v-if="lastUpdate">
+                        <span class="status-dot"></span>{{ lastUpdate }}
+                    </div>
+                    <button class="theme-toggle" @click="toggleTheme">
+                        {{ themeLabel }}
+                    </button>
+                    <button class="modem-toggle" :class="{ active: sidebarOpen }" @click="toggleSidebar">
+                        设置
+                    </button>
+                </div>
+            </div>
+
+            <!-- 侧边栏 -->
+            <div class="modem-sidebar" :class="{ open: sidebarOpen }">
+                <div class="sidebar-header">
+                    <div class="sidebar-title">设置</div>
+                    <button class="close-btn" @click="closeSidebar">&times;</button>
+                </div>
+                <div class="sidebar-tabs">
+                    <div class="sidebar-tab" :class="{ active: activeTab === 'devices' }"
+                        @click="activeTab = 'devices'">
+                        设备信息 ({{ modems.length }})
+                    </div>
+                    <div class="sidebar-tab" :class="{ active: activeTab === 'channels' }" @click="switchToChannels">
+                        推送通道
+                    </div>
+                </div>
+                <div class="sidebar-content">
+                    <!-- 设备信息 -->
+                    <div class="tab-content" v-show="activeTab === 'devices'">
+                        <div v-if="modemsLoading" class="loading-state">
+                            <div class="spinner"></div>
+                            <div class="loading-text">加载中</div>
+                        </div>
+                        <div v-else-if="modemsError" class="error-state">{{ modemsError }}</div>
+                        <div v-else-if="modems.length === 0" class="empty-state">
+                            <div class="empty-text">暂无设备</div>
+                        </div>
+                        <div v-else>
+                            <div v-for="modem in modems" :key="modem.imei" class="modem-item">
+                                <div class="modem-name">{{ modem.model || modem.manufacturer || '未知设备' }}</div>
+                                <div class="modem-details">
+                                    <div class="detail-row">
+                                        <span class="detail-label">IMEI</span>
+                                        <span class="detail-value">{{ modem.imei || '--' }}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">ICCID</span>
+                                        <span class="detail-value">{{ modem.iccid || '--' }}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">手机号</span>
+                                        <span class="detail-value">{{ modem.number || '--' }}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">运营商</span>
+                                        <span class="detail-value">{{ modem.operator_name || '--' }}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">制造商</span>
+                                        <span class="detail-value">{{ modem.manufacturer || '--' }}</span>
+                                    </div>
+                                    <div class="signal-row">
+                                        <span class="detail-label">信号</span>
+                                        <div class="signal-bar">
+                                            <div class="signal-fill" :class="getSignalClass(modem.signal_quality)"
+                                                :style="{ width: modem.signal_quality + '%' }">
+                                            </div>
+                                        </div>
+                                        <span class="signal-percent"
+                                            :style="{ color: getSignalColor(modem.signal_quality) }">
+                                            {{ modem.signal_quality }}%
+                                        </span>
+                                    </div>
+
+                                    <!-- USSD 执行 -->
+                                    <div class="ussd-section">
+                                        <div class="ussd-header">USSD 代码执行</div>
+                                        <div class="ussd-input-group">
+                                            <input class="ussd-input" v-model="ussdCode" placeholder="如 *#100#"
+                                                :disabled="ussdLoading" />
+                                            <button class="ussd-btn" @click="runUSSD" :disabled="ussdLoading">
+                                                {{ ussdLoading ? '执行中...' : '发送' }}
+                                            </button>
+                                        </div>
+                                        <div class="ussd-result" v-if="ussdResult">{{ ussdResult }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 推送通道 -->
+                    <div class="tab-content" v-show="activeTab === 'channels'">
+                        <div v-if="channelsLoading" class="loading-state">
+                            <div class="spinner"></div>
+                            <div class="loading-text">加载通道配置中...</div>
+                        </div>
+                        <div v-else-if="channelsError" class="error-state">{{ channelsError }}</div>
+                        <div v-else>
+                            <div
+                                style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                                <div style="color: var(--text-secondary); font-size: 14px;">测试所有启用通道</div>
+                                <button class="save-channels-btn" @click="testAllChannels" :disabled="testingChannels"
+                                    style="padding: 8px 24px; width: auto; position: static;">
+                                    {{ testingChannels ? '测试中...' : '测试通道' }}
+                                </button>
+                            </div>
+                            <div class="channel-list">
+                                <!-- Email -->
+                                <div class="channel-card">
+                                    <div class="channel-header">
+                                        <span class="channel-type-badge">邮件推送 (Email)</span>
+                                        <label class="channel-enabled">
+                                            <input type="checkbox" v-model="channelsList[0].enabled" />
+                                            启用
+                                        </label>
+                                    </div>
+                                    <div class="channel-fields">
+                                        <div class="field-group">
+                                            <label class="field-label">SMTP 服务器</label>
+                                            <input class="field-input" v-model="channelsList[0].host"
+                                                placeholder="smtp.gmail.com" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">端口</label>
+                                            <input type="number" class="field-input"
+                                                v-model.number="channelsList[0].port" placeholder="587" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="channel-enabled">
+                                                <input type="checkbox" v-model="channelsList[0].use_tls" />
+                                                使用 TLS 加密
+                                            </label>
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">用户名</label>
+                                            <input class="field-input" v-model="channelsList[0].username"
+                                                placeholder="user@gmail.com" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">密码</label>
+                                            <div style="position: relative;">
+                                                <input :type="showPasswords.email ? 'text' : 'password'"
+                                                    class="field-input" v-model="channelsList[0].password"
+                                                    placeholder="••••••" style="padding-right: 35px;" />
+                                                <span @click="showPasswords.email = !showPasswords.email"
+                                                    style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; user-select: none; width: 20px; height: 20px;">
+                                                    <svg v-if="showPasswords.email" xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                        fill="none" stroke="currentColor" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path
+                                                            d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                                        </path>
+                                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                    </svg>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">发件人</label>
+                                            <input class="field-input" v-model="channelsList[0].from"
+                                                placeholder="sender@gmail.com" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">收件人 (多个用逗号分隔)</label>
+                                            <input class="field-input" :value="toStr(channelsList[0].to)"
+                                                @input="channelsList[0].to = fromStr($event.target.value)"
+                                                placeholder="a@gmail.com, b@gmail.com" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Bark -->
+                                <div class="channel-card">
+                                    <div class="channel-header">
+                                        <span class="channel-type-badge">Bark 推送</span>
+                                        <label class="channel-enabled">
+                                            <input type="checkbox" v-model="channelsList[1].enabled" />
+                                            启用
+                                        </label>
+                                    </div>
+                                    <div class="channel-fields">
+                                        <div class="field-group">
+                                            <label class="field-label">推送地址</label>
+                                            <input class="field-input" v-model="channelsList[1].endpoint"
+                                                placeholder="https://api.day.app/your_key" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">标题 (可选)</label>
+                                            <input class="field-input" v-model="channelsList[1].title"
+                                                placeholder="SMS通知" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Gotify -->
+                                <div class="channel-card">
+                                    <div class="channel-header">
+                                        <span class="channel-type-badge">Gotify 推送</span>
+                                        <label class="channel-enabled">
+                                            <input type="checkbox" v-model="channelsList[2].enabled" />
+                                            启用
+                                        </label>
+                                    </div>
+                                    <div class="channel-fields">
+                                        <div class="field-group">
+                                            <label class="field-label">服务器地址</label>
+                                            <input class="field-input" v-model="channelsList[2].endpoint"
+                                                placeholder="https://gotify.example.com" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">Token</label>
+                                            <div style="position: relative;">
+                                                <input :type="showPasswords.gotify ? 'text' : 'password'"
+                                                    class="field-input" v-model="channelsList[2].token"
+                                                    placeholder="应用令牌" style="padding-right: 35px;" />
+                                                <span @click="showPasswords.gotify = !showPasswords.gotify"
+                                                    style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; user-select: none; width: 20px; height: 20px;">
+                                                    <svg v-if="showPasswords.gotify" xmlns="http://www.w3.org/2000/svg"
+                                                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                        fill="none" stroke="currentColor" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path
+                                                            d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                                        </path>
+                                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                    </svg>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">优先级 (0-10)</label>
+                                            <input type="number" class="field-input"
+                                                v-model.number="channelsList[2].priority" placeholder="5" min="0"
+                                                max="10" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ServerChan -->
+                                <div class="channel-card">
+                                    <div class="channel-header">
+                                        <span class="channel-type-badge">Server酱3 推送</span>
+                                        <label class="channel-enabled">
+                                            <input type="checkbox" v-model="channelsList[3].enabled" />
+                                            启用
+                                        </label>
+                                    </div>
+                                    <div class="channel-fields">
+                                        <div class="field-group">
+                                            <label class="field-label">SendKey</label>
+                                            <div style="position: relative;">
+                                                <input :type="showPasswords.serverchan ? 'text' : 'password'"
+                                                    class="field-input" v-model="channelsList[3].send_key"
+                                                    placeholder="SCT..." style="padding-right: 35px;" />
+                                                <span @click="showPasswords.serverchan = !showPasswords.serverchan"
+                                                    style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; user-select: none; width: 20px; height: 20px;">
+                                                    <svg v-if="showPasswords.serverchan"
+                                                        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                        fill="none" stroke="currentColor" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                        fill="none" stroke="currentColor" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        style="width: 100%; height: 100%; opacity: 0.6;">
+                                                        <path
+                                                            d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                                        </path>
+                                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                    </svg>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Webhook -->
+                                <div class="channel-card">
+                                    <div class="channel-header">
+                                        <span class="channel-type-badge">Webhook 推送</span>
+                                        <label class="channel-enabled">
+                                            <input type="checkbox" v-model="channelsList[4].enabled" />
+                                            启用
+                                        </label>
+                                    </div>
+                                    <div class="channel-fields">
+                                        <div class="field-group">
+                                            <label class="field-label">URL</label>
+                                            <input class="field-input" v-model="channelsList[4].url"
+                                                placeholder="https://example.com/webhook" />
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">请求方法</label>
+                                            <select class="field-input" v-model="channelsList[4].method">
+                                                <option value="POST">POST</option>
+                                                <option value="GET">GET</option>
+                                            </select>
+                                        </div>
+                                        <div class="field-group">
+                                            <label class="field-label">请求头 (JSON)</label>
+                                            <textarea class="field-input" v-model="channelsList[4].headers_json"
+                                                rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="save-channels-btn" @click="saveChannels" :disabled="channelsSaving">
+                                {{ channelsSaving ? '保存中...' : '保存配置' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主内容区 - 短信列表 -->
+            <div class="main-content">
+                <div class="messages-container">
+                    <div class="messages-header">
+                        <div class="messages-title">消息</div>
+                        <div class="message-count" v-if="!messagesLoading && !messagesError">
+                            {{ filteredMessages.length }} / {{ messages.length }} 条
+                        </div>
+                    </div>
+
+                    <!-- 搜索框 -->
+                    <div class="search-box" v-if="!messagesLoading && !messagesError && messages.length > 0">
+                        <input type="text" class="search-input" placeholder="搜索短信内容或发送号码..." v-model="searchQuery" />
+                    </div>
+
+                    <div v-if="messagesLoading" class="loading-state">
+                        <div class="spinner"></div>
+                        <div class="loading-text">加载中</div>
+                    </div>
+                    <div v-else-if="messagesError" class="error-state">{{ messagesError }}</div>
+                    <div v-else-if="messages.length === 0" class="empty-state">
+                        <div class="empty-icon">—</div>
+                        <div class="empty-text">暂无短信记录</div>
+                    </div>
+                    <div v-else-if="filteredMessages.length === 0" class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <div class="empty-text">没有找到匹配的短信</div>
+                    </div>
+                    <div v-else>
+                        <div v-for="msg in filteredMessages" :key="msg.id" class="message-item">
+                            <div class="message-header">
+                                <div class="message-sender">
+                                    <div class="sender-number">{{ msg.number }}</div>
+                                    <div class="sender-device">{{ msg.modem }}</div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 16px;">
+                                    <div class="message-timestamp">{{ formatTime(msg.timestamp) }}</div>
+                                    <button class="delete-btn" @click="confirmDelete(msg)">删除</button>
+                                </div>
+                            </div>
+                            <div class="message-body">{{ msg.text || '(空消息)' }}</div>
+                        </div>
+
+                        <!-- 加载更多 -->
+                        <div v-if="hasMoreMessages && !searchQuery.trim()" style="text-align: center; padding: 20px;">
+                            <button @click="loadMoreMessages" :disabled="loadingMore"
+                                style="padding: 10px 30px; background: transparent; border: 1px solid var(--border-secondary); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">
+                                {{ loadingMore ? '加载中...' : '加载更多' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 删除确认对话框 -->
+            <div v-if="showDeleteModal" class="modal-overlay" @click.self="cancelDelete">
+                <div class="modal-content">
+                    <div class="modal-title">确认删除</div>
+                    <div class="modal-message">
+                        确定要删除来自 <strong>{{ messageToDelete?.number }}</strong> 的短信吗？<br>
+                        此操作不可撤销。
+                    </div>
+                    <div class="modal-actions">
+                        <button class="modal-btn" @click="cancelDelete">取消</button>
+                        <button class="modal-btn danger" @click="deleteMessage">删除</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, onUnmounted, computed } = Vue;
+
+        createApp({
+            setup() {
+                const modems = ref([]);
+                const messages = ref([]);
+                const totalMessages = ref(0);
+                const messageOffset = ref(0);
+                const messageLimit = 50;
+                const hasMoreMessages = computed(() => messages.value.length < totalMessages.value);
+
+                const channelsList = ref([
+                    { type: 'email', enabled: false, port: 587, use_tls: true, to: [] },
+                    { type: 'bark', enabled: false },
+                    { type: 'gotify', enabled: false, priority: 5 },
+                    { type: 'serverchan', enabled: false },
+                    { type: 'webhook', enabled: false, method: 'POST' }
+                ]);
+                const modemsLoading = ref(true);
+                const messagesLoading = ref(true);
+                const loadingMore = ref(false);
+                const channelsLoading = ref(false);
+                const modemsError = ref(null);
+                const messagesError = ref(null);
+                const channelsError = ref(null);
+                const lastUpdate = ref('');
+                const sidebarOpen = ref(false);
+                const activeTab = ref('devices'); // 'devices' or 'channels'
+                const theme = ref('auto'); // 'light', 'dark', 'auto'
+                const searchQuery = ref('');
+                const showDeleteModal = ref(false);
+                const messageToDelete = ref(null);
+                const channelsSaving = ref(false);
+                const testingChannels = ref(false);
+                const showPasswords = ref({
+                    email: false,
+                    gotify: false,
+                    serverchan: false
+                });
+
+                // USSD
+                const ussdCode = ref('*#100#');
+                const ussdResult = ref('');
+                const ussdLoading = ref(false);
+                const selectedModem = ref('');
+
+                let refreshTimer = null;
+                let ws = null;
+                let reconnectTimer = null;
+
+                // 字符串数组互转
+                const toStr = (arr) => Array.isArray(arr) ? arr.join(', ') : '';
+                const fromStr = (str) => str.split(',').map(s => s.trim()).filter(s => s);
+
+                // 过滤后的消息列表
+                const filteredMessages = computed(() => {
+                    if (!searchQuery.value.trim()) {
+                        return messages.value;
+                    }
+                    const query = searchQuery.value.toLowerCase();
+                    return messages.value.filter(msg => {
+                        return (msg.text && msg.text.toLowerCase().includes(query)) ||
+                            (msg.number && msg.number.includes(query)) ||
+                            (msg.modem && msg.modem.toLowerCase().includes(query));
+                    });
+                });
+
+                // 主题标签
+                const themeLabel = computed(() => {
+                    const labels = { light: '浅色', dark: '深色', auto: '跟随系统' };
+                    return labels[theme.value];
+                });
+
+                // 初始化主题
+                const initTheme = () => {
+                    const savedTheme = localStorage.getItem('theme') || 'dark';
+                    theme.value = savedTheme;
+                    applyTheme(savedTheme);
+                };
+
+                // 应用主题
+                const applyTheme = (themeName) => {
+                    const root = document.documentElement;
+
+                    if (themeName === 'auto') {
+                        // 检测系统主题偏好
+                        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                        root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+                    } else {
+                        root.setAttribute('data-theme', themeName);
+                    }
+                };
+
+                // 切换主题
+                const toggleTheme = () => {
+                    const themes = ['dark', 'light', 'auto'];
+                    const currentIndex = themes.indexOf(theme.value);
+                    const nextIndex = (currentIndex + 1) % themes.length;
+                    theme.value = themes[nextIndex];
+
+                    localStorage.setItem('theme', theme.value);
+                    applyTheme(theme.value);
+                };
+
+                // 监听系统主题变化
+                const watchSystemTheme = () => {
+                    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                    mediaQuery.addEventListener('change', (e) => {
+                        if (theme.value === 'auto') {
+                            applyTheme('auto');
+                        }
+                    });
+                };
+
+                const formatTime = (timestamp) => {
+                    if (!timestamp) return '未知';
+                    const date = new Date(timestamp);
+                    const now = new Date();
+                    const diff = now - date;
+
+                    // 1分钟内
+                    if (diff < 60000) return '刚刚';
+                    // 1小时内
+                    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+                    // 24小时内
+                    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+                    // 7天内
+                    if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前';
+
+                    // 超过7天显示完整日期
+                    return date.toLocaleString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                };
+
+                const getSignalClass = (quality) => {
+                    if (quality >= 80) return 'signal-excellent';
+                    if (quality >= 60) return 'signal-good';
+                    if (quality >= 40) return 'signal-fair';
+                    if (quality > 0) return 'signal-poor';
+                    return 'signal-none';
+                };
+
+                const getSignalColor = (quality) => {
+                    if (quality >= 80) return 'var(--signal-excellent)';
+                    if (quality >= 60) return 'var(--signal-good)';
+                    if (quality >= 40) return 'var(--signal-fair)';
+                    if (quality > 0) return 'var(--signal-poor)';
+                    return 'var(--signal-none)';
+                };
+
+                // 获取通道类型的显示名称
+                const getChannelTypeName = (type) => {
+                    const typeNames = {
+                        'email': 'Email',
+                        'bark': 'Bark',
+                        'gotify': 'Gotify',
+                        'serverchan': 'Server酱3',
+                        'webhook': 'Webhook'
+                    };
+                    return typeNames[type] || type || '未知';
+                };
+
+                // 侧边栏控制
+                const toggleSidebar = () => {
+                    sidebarOpen.value = !sidebarOpen.value;
+                };
+
+                const closeSidebar = () => {
+                    sidebarOpen.value = false;
+                };
+
+                const switchToChannels = () => {
+                    activeTab.value = 'channels';
+                    if (!channelsLoading.value) {
+                        loadChannels();
+                    }
+                };
+
+                const loadModems = async () => {
+                    try {
+                        modemsError.value = null;
+                        const response = await fetch('/api/modems');
+                        if (!response.ok) throw new Error('加载失败');
+                        modems.value = await response.json();
+                        if (modems.value.length > 0 && !selectedModem.value) {
+                            selectedModem.value = modems.value[0].imei;
+                        }
+                        updateLastUpdateTime();
+                    } catch (error) {
+                        modemsError.value = '加载设备信息失败: ' + error.message;
+                    } finally {
+                        modemsLoading.value = false;
+                    }
+                };
+
+                const loadMessages = async (append = false) => {
+                    try {
+                        if (append) {
+                            loadingMore.value = true;
+                        } else {
+                            messagesLoading.value = true;
+                            messageOffset.value = 0;
+                            messagesError.value = null;
+                        }
+
+                        const offset = append ? messageOffset.value : 0;
+                        const response = await fetch(`/api/messages?limit=${messageLimit}&offset=${offset}`);
+                        if (!response.ok) throw new Error('加载失败');
+
+                        const data = await response.json();
+                        // 兼容旧 API (返回数组) 和新 API (返回对象 {items, total})
+                        let newMessages = [];
+                        let total = 0;
+
+                        if (Array.isArray(data)) {
+                            newMessages = data;
+                            total = data.length; // 旧 API 没有总数，假设只有这些
+                        } else {
+                            newMessages = data.items || [];
+                            total = data.total || 0;
+                        }
+
+                        // 排序：最新的在前 (backend 已经按倒序返回，但为了保险可以再排一次，或者直接信任后端)
+                        // 这里假设后端已经倒序，直接使用
+
+                        if (append) {
+                            messages.value = [...messages.value, ...newMessages];
+                        } else {
+                            messages.value = newMessages;
+                        }
+
+                        totalMessages.value = total;
+                        messageOffset.value += newMessages.length;
+
+                    } catch (error) {
+                        if (!append) {
+                            messagesError.value = '加载短信失败: ' + error.message;
+                        } else {
+                            alert('加载更多失败: ' + error.message);
+                        }
+                    } finally {
+                        messagesLoading.value = false;
+                        loadingMore.value = false;
+                    }
+                };
+
+                const loadMoreMessages = () => {
+                    if (!hasMoreMessages.value || loadingMore.value) return;
+                    loadMessages(true);
+                };
+
+                const loadChannels = async () => {
+                    try {
+                        channelsLoading.value = true;
+                        channelsError.value = null;
+                        const response = await fetch('/api/channels');
+                        if (!response.ok) throw new Error('加载失败');
+                        const data = await response.json();
+
+                        console.log('从服务器加载的通道配置:', data);
+
+                        // 完全替换本地模板，确保所有字段都被正确覆盖
+                        if (Array.isArray(data) && data.length > 0) {
+                            data.forEach(ch => {
+                                const idx = channelsList.value.findIndex(c => c.type === ch.type);
+                                if (idx !== -1) {
+                                    // 确保 to 字段正确处理
+                                    if (ch.type === 'email' && !Array.isArray(ch.to)) {
+                                        ch.to = [];
+                                    }
+                                    channelsList.value[idx] = { ...ch };
+                                    console.log(`已合并通道: ${ch.type}`, channelsList.value[idx]);
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        channelsError.value = '加载通道配置失败: ' + error.message;
+                        console.error('加载通道失败:', error);
+                    } finally {
+                        channelsLoading.value = false;
+                    }
+                };
+
+                const saveChannels = async () => {
+                    try {
+                        channelsSaving.value = true;
+                        const response = await fetch('/api/channels/save', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(channelsList.value)
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.text();
+                            throw new Error(error || '保存失败');
+                        }
+
+                        alert('配置已保存成功！');
+                    } catch (error) {
+                        alert('保存失败: ' + error.message);
+                    } finally {
+                        channelsSaving.value = false;
+                    }
+                };
+
+                const testAllChannels = async () => {
+                    const enabledChannels = channelsList.value.filter(ch => ch.enabled);
+                    if (enabledChannels.length === 0) {
+                        alert('❌ 没有启用的推送通道，请先启用至少一个通道');
+                        return;
+                    }
+
+                    try {
+                        testingChannels.value = true;
+
+                        const response = await fetch('/api/channels/test', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(enabledChannels)
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.text();
+                            throw new Error(error || '测试失败');
+                        }
+
+                        const result = await response.json();
+                        if (result.success) {
+                            alert(`✅ 测试推送已发送到 ${enabledChannels.length} 个通道！请检查是否收到通知。`);
+                        } else {
+                            alert('❌ 测试失败: ' + (result.error || '未知错误'));
+                        }
+                    } catch (error) {
+                        alert('❌ 测试失败: ' + error.message);
+                    } finally {
+                        testingChannels.value = false;
+                    }
+                };
+
+                const runUSSD = async () => {
+                    if (!selectedModem.value || !ussdCode.value) {
+                        alert('请选择设备并输入 USSD 代码');
+                        return;
+                    }
+
+                    try {
+                        ussdLoading.value = true;
+                        ussdResult.value = '';
+
+                        const response = await fetch('/api/ussd', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                imei: selectedModem.value,
+                                code: ussdCode.value
+                            })
+                        });
+
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data.error || '执行失败');
+                        }
+
+                        ussdResult.value = data.reply || 'USSD 请求已发送，但未收到即时回复（请留意短信通知）。';
+                    } catch (error) {
+                        alert('USSD 执行失败: ' + error.message);
+                    } finally {
+                        ussdLoading.value = false;
+                    }
+                };
+
+                const updateLastUpdateTime = () => {
+                    const now = new Date();
+                    lastUpdate.value = '更新于 ' + now.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                };
+
+                const refresh = () => {
+                    loadModems();
+                    // 不自动刷新消息列表，以免干扰翻页（或者只刷新第一页）
+                    // 选择：如果我们在第一页，可以尝试刷新最新的
+                    if (messageOffset.value <= messageLimit) {
+                        // 简单的做法：这里只刷新 modem，消息刷新由 websocket 或手动触发
+                    }
+                };
+
+                // 确认删除
+                const confirmDelete = (msg) => {
+                    messageToDelete.value = msg;
+                    showDeleteModal.value = true;
+                };
+
+                // 取消删除
+                const cancelDelete = () => {
+                    showDeleteModal.value = false;
+                    messageToDelete.value = null;
+                };
+
+                // 删除短信
+                const deleteMessage = async () => {
+                    if (!messageToDelete.value) return;
+
+                    try {
+                        const response = await fetch('/api/messages/delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ id: messageToDelete.value.id })
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.text();
+                            throw new Error(error || '删除失败');
+                        }
+
+                        // 从列表中移除
+                        messages.value = messages.value.filter(m => m.id !== messageToDelete.value.id);
+
+                        // 关闭对话框
+                        cancelDelete();
+                    } catch (error) {
+                        alert('删除失败: ' + error.message);
+                    }
+                };
+
+                // WebSocket 连接
+                const connectWebSocket = () => {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+                    ws = new WebSocket(wsUrl);
+
+                    ws.onopen = () => {
+                        console.log('WebSocket 已连接');
+                    };
+
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'new_message') {
+                                // 将新消息插入到列表顶部
+                                messages.value.unshift(data.message);
+                                totalMessages.value++;
+                                messageOffset.value++; // 偏移量增加
+                                updateLastUpdateTime();
+                            }
+                        } catch (error) {
+                            console.error('处理 WebSocket 消息失败:', error);
+                        }
+                    };
+
+                    ws.onerror = (error) => {
+                        console.error('WebSocket 错误:', error);
+                    };
+
+                    ws.onclose = () => {
+                        console.log('WebSocket 已断开，5秒后重连...');
+                        reconnectTimer = setTimeout(connectWebSocket, 5000);
+                    };
+                };
+
+                onMounted(() => {
+                    initTheme();
+                    watchSystemTheme();
+                    loadModems();
+                    loadMessages(); // 初始加载
+                    connectWebSocket();
+                    refreshTimer = setInterval(refresh, 30000);
+                });
+
+                onUnmounted(() => {
+                    if (refreshTimer) {
+                        clearInterval(refreshTimer);
+                    }
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                    }
+                    if (ws) {
+                        ws.close();
+                    }
+                });
+
+                return {
+                    modems,
+                    messages,
+                    channelsList,
+                    modemsLoading,
+                    messagesLoading,
+                    loadingMore,
+                    hasMoreMessages,
+                    channelsLoading,
+                    modemsError,
+                    messagesError,
+                    channelsError,
+                    lastUpdate,
+                    sidebarOpen,
+                    activeTab,
+                    theme,
+                    themeLabel,
+                    searchQuery,
+                    filteredMessages,
+                    showDeleteModal,
+                    messageToDelete,
+                    channelsSaving,
+                    testingChannels,
+                    showPasswords,
+                    ussdCode,
+                    ussdResult,
+                    ussdLoading,
+                    selectedModem,
+                    formatTime,
+                    getSignalClass,
+                    getSignalColor,
+                    toStr,
+                    fromStr,
+                    toggleSidebar,
+                    closeSidebar,
+                    switchToChannels,
+                    toggleTheme,
+                    confirmDelete,
+                    cancelDelete,
+                    deleteMessage,
+                    saveChannels,
+                    testAllChannels,
+                    runUSSD,
+                    loadMoreMessages
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

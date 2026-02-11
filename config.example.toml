@@ -1,0 +1,57 @@
+# SMS 转发器配置文件
+
+# 存储配置
+[storage]
+enabled = true
+path = "./sms.json"  # 短信保存路径
+
+# Web 服务器配置
+[server]
+enabled = true
+listen = ":8080"  # 监听地址，访问 http://localhost:8080
+
+# 通知通道配置
+# 支持多个通道，按顺序尝试发送
+
+# Email 通道
+[[channels]]
+type = "email"
+enabled = true  # 是否启用此通道
+host = "smtp.example.com"
+port = 587
+username = "your-email@example.com"
+password = "your-password"
+from = "your-email@example.com"
+to = ["recipient@example.com"]
+# use_tls = true  # 可选，默认 true
+
+# Bark 通道 (iOS)
+[[channels]]
+type = "bark"
+enabled = false  # 是否启用此通道
+endpoint = "https://api.day.app/your-device-key"
+# title = "SMS 通知"  # 可选
+
+# Gotify 通道
+[[channels]]
+type = "gotify"
+enabled = false  # 是否启用此通道
+endpoint = "https://gotify.example.com"
+token = "your-app-token"
+# priority = 5  # 可选，默认 5
+
+# ServerChan (Server酱) 通道
+[[channels]]
+type = "serverchan"
+enabled = false  # 是否启用此通道
+send_key = "your-sendkey"
+
+# Webhook 通道
+[[channels]]
+type = "webhook"
+enabled = false  # 是否启用此通道
+url = "https://your-webhook-endpoint.com/notify"
+method = "POST"  # GET 或 POST
+# headers 可选
+[channels.headers]
+Authorization = "Bearer your-token"
