@@ -11,7 +11,7 @@
 - 支持多种转发通道：Email, Bark, Gotify, ServerChan3, Webhook。
 - 提供 Web 管理界面，支持查看短信列表和设备状态。
 - 支持 USSD 代码执行（如查询话费）。
-- 适配 Linux x64 和 Linux ARM64 平台 (仅支持 Linux 系统)。
+- 适配 Linux x64 和 Linux ARM64 平台。
 
 ## 已测试设备
 
