@@ -25,7 +25,7 @@ type Message struct {
 // Storage 短信存储
 type Storage struct {
 	path           string
-	mu             sync.Mutex
+	mu             sync.RWMutex
 	messages       []Message
 	ids            map[string]bool // 用于快速查重
 	messageHandler func(Message)   // 新消息回调
@@ -59,7 +59,6 @@ func GenerateID(modemIMEI string, sms *modem.SMS) string {
 // Save 保存短信
 func (s *Storage) Save(modemIMEI string, sms *modem.SMS) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	id := GenerateID(modemIMEI, sms)
 
@@ -79,11 +78,12 @@ func (s *Storage) Save(modemIMEI string, sms *modem.SMS) error {
 
 	s.messages = append(s.messages, msg)
 	s.ids[id] = true
+	handler := s.messageHandler
+	s.mu.Unlock()
 
 	// 触发新消息回调（在解锁后执行，避免阻塞）
-	// 注意：为了简单起见，这里仍在持有锁的情况下启动 goroutine，但 goroutine 内部不应再请求此锁
-	if s.messageHandler != nil {
-		go s.messageHandler(msg)
+	if handler != nil {
+		go handler(msg)
 	}
 
 	return s.save()
@@ -91,8 +91,8 @@ func (s *Storage) Save(modemIMEI string, sms *modem.SMS) error {
 
 // Has 检查消息是否存在
 func (s *Storage) Has(modemIMEI string, sms *modem.SMS) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	id := GenerateID(modemIMEI, sms)
 	return s.ids[id]
@@ -107,8 +107,8 @@ func (s *Storage) SetMessageHandler(handler func(Message)) {
 
 // List 列出所有短信
 func (s *Storage) List() []Message {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	result := make([]Message, len(s.messages))
 	copy(result, s.messages)
@@ -117,8 +117,8 @@ func (s *Storage) List() []Message {
 
 // ListWithPagination 分页获取短信 (按时间倒序)
 func (s *Storage) ListWithPagination(limit, offset int) ([]Message, int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	total := int64(len(s.messages))
 	if total == 0 {
