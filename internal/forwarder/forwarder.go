@@ -29,6 +29,7 @@ type Forwarder struct {
 	cancels   map[dbus.ObjectPath]context.CancelFunc
 	equipment map[string]dbus.ObjectPath
 	modems    map[dbus.ObjectPath]string
+	modemObjs map[dbus.ObjectPath]*modem.Modem
 	processed map[string]time.Time // key: timestamp_from_text
 }
 
@@ -47,6 +48,7 @@ func New(cfg *config.Config, manager *modem.Manager, store *storage.Storage) (*F
 		cancels:   make(map[dbus.ObjectPath]context.CancelFunc),
 		equipment: make(map[string]dbus.ObjectPath),
 		modems:    make(map[dbus.ObjectPath]string),
+		modemObjs: make(map[dbus.ObjectPath]*modem.Modem),
 		processed: make(map[string]time.Time),
 	}, nil
 }
@@ -122,6 +124,7 @@ func (f *Forwarder) addModem(ctx context.Context, path dbus.ObjectPath, m *modem
 		f.equipment[m.EquipmentIdentifier] = path
 		f.modems[path] = m.EquipmentIdentifier
 	}
+	f.modemObjs[path] = m
 	f.mu.Unlock()
 
 	// 立即取消旧订阅
@@ -151,7 +154,10 @@ func (f *Forwarder) removeModem(path dbus.ObjectPath) {
 	if equipmentID, ok := f.modems[path]; ok {
 		delete(f.modems, path)
 		delete(f.equipment, equipmentID)
+		delete(f.modemObjs, path)
 		slog.Info("移除调制解调器", "imei", equipmentID)
+	} else {
+		delete(f.modemObjs, path)
 	}
 	f.mu.Unlock()
 	if cancel != nil {
@@ -169,6 +175,7 @@ func (f *Forwarder) stopAll() {
 	f.cancels = make(map[dbus.ObjectPath]context.CancelFunc)
 	f.equipment = make(map[string]dbus.ObjectPath)
 	f.modems = make(map[dbus.ObjectPath]string)
+	f.modemObjs = make(map[dbus.ObjectPath]*modem.Modem)
 	f.mu.Unlock()
 
 	for _, cancel := range cancels {
@@ -324,11 +331,9 @@ func (f *Forwarder) GetModems() []*modem.Modem {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	modems := make([]*modem.Modem, 0, len(f.modems))
-	for path := range f.modems {
-		if m, err := modem.NewModem(f.manager.Conn(), path); err == nil {
-			modems = append(modems, m)
-		}
+	modems := make([]*modem.Modem, 0, len(f.modemObjs))
+	for _, m := range f.modemObjs {
+		modems = append(modems, m)
 	}
 	return modems
 }
