@@ -13,7 +13,7 @@
 ## 已测试设备
 
 - Sierra Wireless AirPrime® EM7430
-- Qualcomm® Snapdragon™ 410 UFI
+- Qualcomm Snapdragon® 410 UFI (UFI-001C,UFI003等)
 
 ## 编译方法
 
