@@ -1,6 +1,7 @@
 package modem
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -65,28 +66,44 @@ func (msg *Messaging) retrieveWithConn(conn *dbus.Conn, objectPath dbus.ObjectPa
 	if err != nil {
 		return nil, err
 	}
-	sms.State = SMSState(variant.Value().(uint32))
+	state, ok := variant.Value().(uint32)
+	if !ok {
+		return nil, fmt.Errorf("短信状态字段类型错误")
+	}
+	sms.State = SMSState(state)
 
 	// 获取号码
 	variant, err = obj.GetProperty(ModemSMSInterface + ".Number")
 	if err != nil {
 		return nil, err
 	}
-	sms.Number = variant.Value().(string)
+	number, ok := variant.Value().(string)
+	if !ok {
+		return nil, fmt.Errorf("短信号码字段类型错误")
+	}
+	sms.Number = number
 
 	// 获取文本
 	variant, err = obj.GetProperty(ModemSMSInterface + ".Text")
 	if err != nil {
 		return nil, err
 	}
-	sms.Text = variant.Value().(string)
+	text, ok := variant.Value().(string)
+	if !ok {
+		return nil, fmt.Errorf("短信文本字段类型错误")
+	}
+	sms.Text = text
 
 	// 获取时间戳
 	variant, err = obj.GetProperty(ModemSMSInterface + ".Timestamp")
 	if err != nil {
 		return nil, err
 	}
-	if t := variant.Value().(string); t != "" {
+	t, ok := variant.Value().(string)
+	if !ok {
+		return nil, fmt.Errorf("短信时间字段类型错误")
+	}
+	if t != "" {
 		// 处理时区格式（+08:00 需要转为 +08:00）
 		if len(t) >= 3 && (t[len(t)-3] == '+' || t[len(t)-3] == '-') {
 			t = t + ":00"

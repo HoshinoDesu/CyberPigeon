@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -84,19 +85,27 @@ func (s *Server) Run(ctx context.Context) error {
 	slog.Info("Web 服务器启动", "listen", s.cfg.Server.Listen)
 
 	// 启动服务器
+	errCh := make(chan error, 1)
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("服务器错误", "error", err)
+			errCh <- err
 		}
 	}()
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		return err
+	}
 
 	// 优雅关闭
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	return s.server.Shutdown(shutdownCtx)
+	if err := s.server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 // ModemInfo 调制解调器信息

@@ -2,13 +2,14 @@ package modem
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/godbus/dbus/v5"
 )
 
 const (
-	ModemManagerInterface = "org.freedesktop.ModemManager1"
-	ModemManagerPath      = "/org/freedesktop/ModemManager1"
+	ModemManagerInterface  = "org.freedesktop.ModemManager1"
+	ModemManagerPath       = "/org/freedesktop/ModemManager1"
 	ObjectManagerInterface = "org.freedesktop.DBus.ObjectManager"
 )
 
@@ -47,7 +48,7 @@ func (m *Manager) Modems() (map[dbus.ObjectPath]*Modem, error) {
 		if _, hasModem := interfaces[ModemInterface]; !hasModem {
 			continue
 		}
-		
+
 		modem, err := NewModem(m.conn, objectPath)
 		if err != nil {
 			continue
@@ -78,30 +79,49 @@ func (m *Manager) Subscribe(handler func(event ModemEvent) error) (func(), error
 
 	signalChan := make(chan *dbus.Signal, 10)
 	m.conn.Signal(signalChan)
+	done := make(chan struct{})
 
 	go func() {
-		for sig := range signalChan {
-			var event ModemEvent
-			event.Path = sig.Body[0].(dbus.ObjectPath)
-
-			switch sig.Name {
-			case ObjectManagerInterface + ".InterfacesAdded":
-				event.Type = ModemEventAdded
-				modem, err := NewModem(m.conn, event.Path)
-				if err == nil {
-					event.Modem = modem
+		for {
+			select {
+			case <-done:
+				return
+			case sig := <-signalChan:
+				if sig == nil || len(sig.Body) == 0 {
+					continue
 				}
-			case ObjectManagerInterface + ".InterfacesRemoved":
-				event.Type = ModemEventRemoved
-			}
 
-			_ = handler(event)
+				path, ok := sig.Body[0].(dbus.ObjectPath)
+				if !ok {
+					continue
+				}
+
+				var event ModemEvent
+				event.Path = path
+
+				switch sig.Name {
+				case ObjectManagerInterface + ".InterfacesAdded":
+					event.Type = ModemEventAdded
+					modem, err := NewModem(m.conn, event.Path)
+					if err == nil {
+						event.Modem = modem
+					}
+				case ObjectManagerInterface + ".InterfacesRemoved":
+					event.Type = ModemEventRemoved
+				default:
+					continue
+				}
+
+				if err := handler(event); err != nil {
+					slog.Debug("处理调制解调器事件失败", "error", err)
+				}
+			}
 		}
 	}()
 
 	unsubscribe := func() {
+		close(done)
 		m.conn.RemoveSignal(signalChan)
-		close(signalChan)
 	}
 
 	return unsubscribe, nil

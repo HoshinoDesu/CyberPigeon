@@ -8,6 +8,6 @@ require (
 )
 
 require (
-	github.com/easychen/serverchan-sdk-golang v1.0.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/easychen/serverchan-sdk-golang v1.0.0
+	github.com/gorilla/websocket v1.5.3
 )
