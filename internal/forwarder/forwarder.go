@@ -2,6 +2,8 @@ package forwarder
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -222,10 +224,16 @@ func (f *Forwarder) handleMessage(m *modem.Modem, sms *modem.SMS) error {
 
 	// 转发到通知通道
 	if len(f.cfg.Channels) > 0 {
+		f.mu.Lock()
+		n := f.notifier
+		f.mu.Unlock()
+
 		msg := f.formatMessage(m, sms)
-		if err := f.notifier.Send(msg); err != nil {
-			slog.Error("发送通知失败", "error", err)
-			return err
+		if n != nil {
+			if err := n.Send(msg); err != nil {
+				slog.Error("发送通知失败", "error", err)
+				return err
+			}
 		}
 	}
 
@@ -237,8 +245,10 @@ func (f *Forwarder) isDuplicateSMS(sms *modem.SMS) bool {
 		return false
 	}
 
-	// 使用 timestamp+from+text 作为唯一标识
-	key := fmt.Sprintf("%d_%s_%s", sms.Timestamp.Unix(), sms.Number, sms.Text)
+	// 使用 timestamp+from+text 的哈希作为唯一标识，避免长文本占用过多内存
+	raw := fmt.Sprintf("%d|%s|%s", sms.Timestamp.Unix(), sms.Number, sms.Text)
+	h := sha1.Sum([]byte(raw))
+	key := hex.EncodeToString(h[:])
 
 	now := time.Now()
 	cutoff := now.Add(-2 * time.Hour)
@@ -254,12 +264,31 @@ func (f *Forwarder) isDuplicateSMS(sms *modem.SMS) bool {
 	}
 
 	if lastTime, exists := f.processed[key]; exists {
-		slog.Info("检测到重复短信", "key", key, "last_processed", lastTime, "gap_ms", now.Sub(lastTime).Milliseconds())
+		slog.Debug("检测到重复短信", "last_processed", lastTime, "gap_ms", now.Sub(lastTime).Milliseconds())
 		return true
 	}
 	f.processed[key] = now
-	slog.Debug("短信首次处理", "key", key)
+	slog.Debug("短信首次处理")
 	return false
+}
+
+// ReloadChannels 重载通知通道配置
+func (f *Forwarder) ReloadChannels(channels []config.ChannelConfig) error {
+	nextCfg := *f.cfg
+	nextCfg.Channels = channels
+
+	nextNotifier, err := notifier.New(&nextCfg)
+	if err != nil {
+		return fmt.Errorf("重载通知通道失败: %w", err)
+	}
+
+	f.mu.Lock()
+	f.cfg.Channels = channels
+	f.notifier = nextNotifier
+	f.mu.Unlock()
+
+	slog.Info("通知通道已重载", "count", len(channels))
+	return nil
 }
 
 // formatMessage 格式化消息
