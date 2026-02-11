@@ -4,10 +4,10 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -166,10 +166,30 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	offset := 0
 
 	if l := query.Get("limit"); l != "" {
-		fmt.Sscanf(l, "%d", &limit)
+		v, err := strconv.Atoi(l)
+		if err != nil {
+			http.Error(w, "Invalid limit", http.StatusBadRequest)
+			return
+		}
+		limit = v
 	}
 	if o := query.Get("offset"); o != "" {
-		fmt.Sscanf(o, "%d", &offset)
+		v, err := strconv.Atoi(o)
+		if err != nil {
+			http.Error(w, "Invalid offset", http.StatusBadRequest)
+			return
+		}
+		offset = v
+	}
+
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
 	}
 
 	messages, total := s.storage.ListWithPagination(limit, offset)
@@ -327,8 +347,11 @@ func (s *Server) handleSaveChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 直接保存所有通道（包括未启用的）
-	s.cfg.Channels = channels
+	// 先热重载转发器中的通知器
+	if err := s.forwarder.ReloadChannels(channels); err != nil {
+		http.Error(w, "Failed to reload channels: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	// 保存到配置文件
 	if err := s.cfg.Save(s.configPath); err != nil {
@@ -420,9 +443,6 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // BroadcastMessage 广播新消息给所有 WebSocket 客户端
 func (s *Server) BroadcastMessage(msg storage.Message) {
-	s.clientsMu.RLock()
-	defer s.clientsMu.RUnlock()
-
 	data, err := json.Marshal(map[string]interface{}{
 		"type":    "new_message",
 		"message": msg,
@@ -432,10 +452,21 @@ func (s *Server) BroadcastMessage(msg storage.Message) {
 		return
 	}
 
+	s.clientsMu.RLock()
+	clients := make([]*websocket.Conn, 0, len(s.clients))
 	for client := range s.clients {
+		clients = append(clients, client)
+	}
+	s.clientsMu.RUnlock()
+
+	for _, client := range clients {
 		err := client.WriteMessage(websocket.TextMessage, data)
 		if err != nil {
 			slog.Error("发送 WebSocket 消息失败", "error", err)
+			s.clientsMu.Lock()
+			delete(s.clients, client)
+			s.clientsMu.Unlock()
+			_ = client.Close()
 		}
 	}
 }
