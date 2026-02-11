@@ -1,5 +1,7 @@
 # 二进制文件
 sms-forwarder
+sms-forwarder-linux-amd64
+sms-forwarder-linux-arm64
 *.exe
 
 # 配置文件
