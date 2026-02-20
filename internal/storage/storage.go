@@ -49,9 +49,9 @@ func New(path string) (*Storage, error) {
 
 // GenerateID 生成消息唯一 ID
 func GenerateID(modemIMEI string, sms *modem.SMS) string {
-	// 使用 MD5(IMEI + Timestamp + Number + Text) 作为唯一 ID
-	// 这样即使同一秒收到两方发来的消息（或者同一方发的两条不同消息），也能区分
-	data := fmt.Sprintf("%s|%d|%s|%s", modemIMEI, sms.Timestamp.Unix(), sms.Number, sms.Text)
+	// 使用 MD5(IMEI + DBusPath + TimestampNano + Number + Text) 作为唯一 ID
+	// 优先借助 DBus Path 与纳秒时间，减少秒级时间戳导致的误判
+	data := fmt.Sprintf("%s|%s|%d|%s|%s", modemIMEI, sms.Path(), sms.Timestamp.UnixNano(), sms.Number, sms.Text)
 	hash := md5.Sum([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
@@ -190,7 +190,7 @@ func (s *Storage) save() error {
 		return err
 	}
 
-	return os.WriteFile(s.path, data, 0644)
+	return os.WriteFile(s.path, data, 0600)
 }
 
 // Close 关闭存储

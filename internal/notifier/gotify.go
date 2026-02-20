@@ -11,7 +11,8 @@ import (
 
 // GotifyChannel Gotify 通道
 type GotifyChannel struct {
-	cfg config.ChannelConfig
+	cfg    config.ChannelConfig
+	client *http.Client
 }
 
 // NewGotifyChannel 创建 Gotify 通道
@@ -22,7 +23,7 @@ func NewGotifyChannel(cfg config.ChannelConfig) (*GotifyChannel, error) {
 	if cfg.Priority == 0 {
 		cfg.Priority = 5
 	}
-	return &GotifyChannel{cfg: cfg}, nil
+	return &GotifyChannel{cfg: cfg, client: newHTTPClient(cfg)}, nil
 }
 
 // Type 返回通道类型
@@ -49,7 +50,13 @@ func (g *GotifyChannel) Send(msg Message) error {
 		return err
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
 	if err != nil {
 		return err
 	}

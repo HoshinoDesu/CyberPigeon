@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,11 +46,37 @@ func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, c
 		configPath: configPath,
 		clients:    make(map[*websocket.Conn]bool),
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true // 允许所有源
-			},
+			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, cfg.Server.AllowedOrigins) },
 		},
 	}
+}
+
+func isOriginAllowed(r *http.Request, allowedOrigins []string) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	if len(allowedOrigins) == 0 {
+		return strings.EqualFold(u.Host, r.Host)
+	}
+
+	for _, allowed := range allowedOrigins {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		if strings.EqualFold(allowed, origin) || strings.EqualFold(allowed, u.Host) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Run 运行服务器
@@ -304,28 +332,34 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	// 定义所有预设通道模板
 	channels := []config.ChannelConfig{
 		{
-			Type:    "email",
-			Enabled: false,
-			Port:    587,
-			UseTLS:  true,
+			Type:              "email",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
+			Port:              587,
+			UseTLS:            true,
 		},
 		{
-			Type:    "bark",
-			Enabled: false,
+			Type:              "bark",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
 		},
 		{
-			Type:     "gotify",
-			Enabled:  false,
-			Priority: 5,
+			Type:              "gotify",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
+			Priority:          5,
 		},
 		{
-			Type:    "serverchan",
-			Enabled: false,
+			Type:              "serverchan",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
 		},
 		{
-			Type:    "webhook",
-			Enabled: false,
-			Method:  "POST",
+			Type:                "webhook",
+			Enabled:             false,
+			RequestTimeoutSec:   10,
+			AllowPrivateNetwork: false,
+			Method:              "POST",
 		},
 	}
 

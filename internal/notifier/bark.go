@@ -11,7 +11,8 @@ import (
 
 // BarkChannel Bark 通道
 type BarkChannel struct {
-	cfg config.ChannelConfig
+	cfg    config.ChannelConfig
+	client *http.Client
 }
 
 // NewBarkChannel 创建 Bark 通道
@@ -19,7 +20,7 @@ func NewBarkChannel(cfg config.ChannelConfig) (*BarkChannel, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("Bark endpoint 未配置")
 	}
-	return &BarkChannel{cfg: cfg}, nil
+	return &BarkChannel{cfg: cfg, client: newHTTPClient(cfg)}, nil
 }
 
 // Type 返回通道类型
@@ -44,7 +45,13 @@ func (b *BarkChannel) Send(msg Message) error {
 		return err
 	}
 
-	resp, err := http.Post(b.cfg.Endpoint, "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, b.cfg.Endpoint, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := b.client.Do(req)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,9 @@ path = "./sms.json"  # 短信保存路径
 [server]
 enabled = true
 listen = ":8080"  # 监听地址，访问 http://localhost:8080
+# 允许的 WebSocket Origin（可填完整 Origin 或 host:port）。
+# 为空时仅允许同源 Origin。
+allowed_origins = ["http://localhost:8080"]
 
 # 通知通道配置
 # 支持多个通道，按顺序尝试发送
@@ -17,6 +20,7 @@ listen = ":8080"  # 监听地址，访问 http://localhost:8080
 [[channels]]
 type = "email"
 enabled = true  # 是否启用此通道
+request_timeout_sec = 10
 host = "smtp.example.com"
 port = 587
 username = "your-email@example.com"
@@ -29,6 +33,7 @@ to = ["recipient@example.com"]
 [[channels]]
 type = "bark"
 enabled = false  # 是否启用此通道
+request_timeout_sec = 10
 endpoint = "https://api.day.app/your-device-key"
 # title = "SMS 通知"  # 可选
 
@@ -36,6 +41,7 @@ endpoint = "https://api.day.app/your-device-key"
 [[channels]]
 type = "gotify"
 enabled = false  # 是否启用此通道
+request_timeout_sec = 10
 endpoint = "https://gotify.example.com"
 token = "your-app-token"
 # priority = 5  # 可选，默认 5
@@ -44,12 +50,15 @@ token = "your-app-token"
 [[channels]]
 type = "serverchan"
 enabled = false  # 是否启用此通道
+request_timeout_sec = 10
 send_key = "your-sendkey"
 
 # Webhook 通道
 [[channels]]
 type = "webhook"
 enabled = false  # 是否启用此通道
+request_timeout_sec = 10
+allow_private_network = false # 默认禁止私网/本地地址，降低 SSRF 风险
 url = "https://your-webhook-endpoint.com/notify"
 method = "POST"  # GET 或 POST
 # headers 可选

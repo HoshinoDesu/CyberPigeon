@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,7 +14,8 @@ import (
 
 // WebhookChannel Webhook 通道
 type WebhookChannel struct {
-	cfg config.ChannelConfig
+	cfg    config.ChannelConfig
+	client *http.Client
 }
 
 // NewWebhookChannel 创建 Webhook 通道
@@ -21,10 +23,59 @@ func NewWebhookChannel(cfg config.ChannelConfig) (*WebhookChannel, error) {
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("Webhook URL 未配置")
 	}
+	u, err := url.Parse(cfg.URL)
+	if err != nil || u.Host == "" {
+		return nil, fmt.Errorf("Webhook URL 无效")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("Webhook URL 仅支持 http/https")
+	}
+	if !cfg.AllowPrivateNetwork && isPrivateOrLocalHost(u.Hostname()) {
+		return nil, fmt.Errorf("Webhook URL 不允许私网或本地地址")
+	}
 	if cfg.Method == "" {
 		cfg.Method = "POST"
 	}
-	return &WebhookChannel{cfg: cfg}, nil
+	return &WebhookChannel{cfg: cfg, client: newHTTPClient(cfg)}, nil
+}
+
+func isPrivateOrLocalHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return true
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		ips, err := net.LookupIP(host)
+		if err != nil || len(ips) == 0 {
+			return true
+		}
+		for _, v := range ips {
+			if isPrivateIP(v) {
+				return true
+			}
+		}
+		return false
+	}
+
+	return isPrivateIP(ip)
+}
+
+func isPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	if ip.IsUnspecified() {
+		return true
+	}
+	return false
 }
 
 // Type 返回通道类型
@@ -85,8 +136,7 @@ func (w *WebhookChannel) Send(msg Message) error {
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return err
 	}
