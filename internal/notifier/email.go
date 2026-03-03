@@ -8,7 +8,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"github.com/sms-forwarder/internal/config"
+	"github.com/CyberPigeon/internal/config"
 )
 
 // EmailChannel Email 通道

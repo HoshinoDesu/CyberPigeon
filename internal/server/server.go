@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sms-forwarder/internal/config"
-	"github.com/sms-forwarder/internal/forwarder"
-	"github.com/sms-forwarder/internal/modem"
-	"github.com/sms-forwarder/internal/notifier"
-	"github.com/sms-forwarder/internal/storage"
+	"github.com/CyberPigeon/internal/config"
+	"github.com/CyberPigeon/internal/forwarder"
+	"github.com/CyberPigeon/internal/modem"
+	"github.com/CyberPigeon/internal/notifier"
+	"github.com/CyberPigeon/internal/storage"
 )
 
 //go:embed web/*

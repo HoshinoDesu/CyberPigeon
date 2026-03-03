@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sms-forwarder/internal/config"
+	"github.com/CyberPigeon/internal/config"
 )
 
 // BarkChannel Bark 通道

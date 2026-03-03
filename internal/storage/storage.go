@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sms-forwarder/internal/modem"
+	"github.com/CyberPigeon/internal/modem"
 )
 
 // Message 存储的短信消息

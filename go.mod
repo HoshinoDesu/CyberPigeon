@@ -1,4 +1,4 @@
-module github.com/sms-forwarder
+module github.com/CyberPigeon
 
 go 1.21.6
 

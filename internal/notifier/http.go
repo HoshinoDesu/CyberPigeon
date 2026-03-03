@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sms-forwarder/internal/config"
+	"github.com/CyberPigeon/internal/config"
 )
 
 const defaultRequestTimeout = 10 * time.Second

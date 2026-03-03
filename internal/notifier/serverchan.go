@@ -5,7 +5,7 @@ import (
 	"time"
 
 	serverchan_sdk "github.com/easychen/serverchan-sdk-golang"
-	"github.com/sms-forwarder/internal/config"
+	"github.com/CyberPigeon/internal/config"
 )
 
 // ServerChanChannel ServerChan 通道

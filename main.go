@@ -10,11 +10,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/sms-forwarder/internal/config"
-	"github.com/sms-forwarder/internal/forwarder"
-	"github.com/sms-forwarder/internal/modem"
-	"github.com/sms-forwarder/internal/server"
-	"github.com/sms-forwarder/internal/storage"
+	"github.com/CyberPigeon/internal/config"
+	"github.com/CyberPigeon/internal/forwarder"
+	"github.com/CyberPigeon/internal/modem"
+	"github.com/CyberPigeon/internal/server"
+	"github.com/CyberPigeon/internal/storage"
 )
 
 func main() {
@@ -84,7 +84,7 @@ func main() {
 		}
 	}()
 
-	slog.Info("SMS 转发器已启动")
+	slog.Info("CyberPigeon 已启动")
 
 	// 等待信号
 	sigCh := make(chan os.Signal, 1)

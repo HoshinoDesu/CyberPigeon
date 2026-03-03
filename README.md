@@ -1,4 +1,4 @@
-# SMS Forwarder
+# CyberPigeon
 
 一个简单的短信转发工具，基于 ModemManager 开发，支持将短信转发到多种通知渠道。
 
@@ -24,7 +24,7 @@
 
 ```bash
 # 编译 Linux ARM64 版本
-GOOS=linux GOARCH=arm64 go build -o sms-forwarder-linux-arm64
+GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 ```
 
 ## 配置说明
@@ -37,7 +37,7 @@ GOOS=linux GOARCH=arm64 go build -o sms-forwarder-linux-arm64
 直接运行编译后的二进制文件：
 
 ```bash
-./sms-forwarder-linux-arm64
+./CyberPigeon-linux-arm64
 ```
 
 程序默认监听端口可在配置文件中修改。

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sms-forwarder/internal/config"
+	"github.com/CyberPigeon/internal/config"
 )
 
 // Message 通知消息
