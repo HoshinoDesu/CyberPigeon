@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/CyberPigeon/internal/config"
 	"github.com/CyberPigeon/internal/forwarder"
 	"github.com/CyberPigeon/internal/modem"
 	"github.com/CyberPigeon/internal/notifier"
 	"github.com/CyberPigeon/internal/storage"
+	"github.com/gorilla/websocket"
 )
 
 //go:embed web/*
@@ -373,6 +373,11 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 			RequestTimeoutSec:   10,
 			AllowPrivateNetwork: false,
 			Method:              "POST",
+		},
+		"wecom": {
+			Type:              "wecom",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
 		},
 	}
 

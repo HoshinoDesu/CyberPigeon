@@ -61,6 +61,12 @@ type ChannelConfig struct {
 	URL     string            `toml:"url" json:"url"`
 	Method  string            `toml:"method" json:"method"`
 	Headers map[string]string `toml:"headers" json:"headers"`
+
+	// WeCom (企业微信)
+	CorpID     string `toml:"corp_id" json:"corp_id"`
+	CorpSecret string `toml:"corp_secret" json:"corp_secret"`
+	AgentID    int    `toml:"agent_id" json:"agent_id"`
+	ToUser     string `toml:"to_user" json:"to_user"`
 }
 
 // Load 加载配置文件
@@ -120,6 +126,13 @@ func channelToMap(ch ChannelConfig) map[string]any {
 		}
 		if len(ch.Headers) > 0 {
 			m["headers"] = ch.Headers
+		}
+	case "wecom":
+		m["corp_id"] = ch.CorpID
+		m["corp_secret"] = ch.CorpSecret
+		m["agent_id"] = ch.AgentID
+		if ch.ToUser != "" {
+			m["to_user"] = ch.ToUser
 		}
 	default:
 		// 未知类型：序列化所有非零字段

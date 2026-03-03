@@ -118,6 +118,8 @@ func createChannel(cfg config.ChannelConfig) (Channel, error) {
 		return NewServerChanChannel(cfg)
 	case "webhook":
 		return NewWebhookChannel(cfg)
+	case "wecom":
+		return NewWeComChannel(cfg)
 	default:
 		return nil, fmt.Errorf("未知通道类型: %s", cfg.Type)
 	}

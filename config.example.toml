@@ -64,3 +64,13 @@ method = "POST"  # GET 或 POST
 # headers 可选
 [channels.headers]
 Authorization = "Bearer your-token"
+
+# 企业微信 (WeCom) 通道
+[[channels]]
+type = "wecom"
+enabled = false  # 是否启用此通道
+request_timeout_sec = 10
+corp_id = "your-corp-id"         # 企业 ID
+corp_secret = "your-app-secret"  # 应用 Secret
+agent_id = 1000002               # 应用 AgentId
+# to_user = "UserID1|UserID2"   # 可选，留空则推送给所有人

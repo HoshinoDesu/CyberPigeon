@@ -1335,6 +1335,52 @@
                                                     rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
                                             </div>
                                         </template>
+
+                                        <!-- WeCom fields -->
+                                        <template v-if="ch.type === 'wecom'">
+                                            <div class="field-group">
+                                                <label class="field-label">Corp ID (企业ID)</label>
+                                                <input class="field-input" v-model="ch.corp_id"
+                                                    placeholder="ww…" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Corp Secret (应用密钥)</label>
+                                                <div style="position: relative;">
+                                                    <input :type="ch._showPwd ? 'text' : 'password'"
+                                                        class="field-input" v-model="ch.corp_secret"
+                                                        placeholder="应用 Secret" style="padding-right: 35px;" />
+                                                    <span @click="ch._showPwd = !ch._showPwd"
+                                                        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; user-select: none; width: 20px; height: 20px;">
+                                                        <svg v-if="ch._showPwd" xmlns="http://www.w3.org/2000/svg"
+                                                            viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                            style="width: 100%; height: 100%; opacity: 0.6;">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                            <circle cx="12" cy="12" r="3"></circle>
+                                                        </svg>
+                                                        <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                            fill="none" stroke="currentColor" stroke-width="2"
+                                                            stroke-linecap="round" stroke-linejoin="round"
+                                                            style="width: 100%; height: 100%; opacity: 0.6;">
+                                                            <path
+                                                                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                                            </path>
+                                                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                        </svg>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">Agent ID (应用ID)</label>
+                                                <input type="number" class="field-input" v-model.number="ch.agent_id"
+                                                    placeholder="1000002" />
+                                            </div>
+                                            <div class="field-group">
+                                                <label class="field-label">接收人 (可选)</label>
+                                                <input class="field-input" v-model="ch.to_user"
+                                                    placeholder="UserID1|UserID2，留空则推送给所有人" />
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
@@ -1348,6 +1394,7 @@
                                     <option value="gotify">Gotify 推送</option>
                                     <option value="serverchan">Server酱3 推送</option>
                                     <option value="webhook">Webhook 推送</option>
+                                    <option value="wecom">企业微信推送</option>
                                 </select>
                                 <button class="add-channel-btn" @click="addChannel" :disabled="!newChannelType">
                                     + 添加推送通道
@@ -1589,7 +1636,8 @@
                     bark: 'Bark 推送',
                     gotify: 'Gotify 推送',
                     serverchan: 'Server酱3 推送',
-                    webhook: 'Webhook 推送'
+                    webhook: 'Webhook 推送',
+                    wecom: '企业微信推送'
                 };
 
                 const getChannelLabel = (type) => channelLabels[type] || type || '未知';
@@ -1599,7 +1647,8 @@
                     bark: { type: 'bark', enabled: false, _showPwd: false },
                     gotify: { type: 'gotify', enabled: false, priority: 5, _showPwd: false },
                     serverchan: { type: 'serverchan', enabled: false, _showPwd: false },
-                    webhook: { type: 'webhook', enabled: false, method: 'POST', headers_json: '', _showPwd: false }
+                    webhook: { type: 'webhook', enabled: false, method: 'POST', headers_json: '', _showPwd: false },
+                    wecom: { type: 'wecom', enabled: false, _showPwd: false }
                 };
 
                 const addChannel = () => {
