@@ -51,6 +51,7 @@ func (m *Manager) Modems() (map[dbus.ObjectPath]*Modem, error) {
 
 		modem, err := NewModem(m.conn, objectPath)
 		if err != nil {
+			slog.Warn("初始化调制解调器失败", "path", objectPath, "error", err)
 			continue
 		}
 		modems[objectPath] = modem

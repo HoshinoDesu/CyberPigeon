@@ -34,15 +34,21 @@ func NewModem(conn *dbus.Conn, path dbus.ObjectPath) (*Modem, error) {
 
 	// 获取设备信息
 	if variant, err := obj.GetProperty(ModemInterface + ".EquipmentIdentifier"); err == nil {
-		modem.EquipmentIdentifier = variant.Value().(string)
+		if v, ok := variant.Value().(string); ok {
+			modem.EquipmentIdentifier = v
+		}
 	}
 
 	if variant, err := obj.GetProperty(ModemInterface + ".Model"); err == nil {
-		modem.Model = variant.Value().(string)
+		if v, ok := variant.Value().(string); ok {
+			modem.Model = v
+		}
 	}
 
 	if variant, err := obj.GetProperty(ModemInterface + ".Manufacturer"); err == nil {
-		modem.Manufacturer = variant.Value().(string)
+		if v, ok := variant.Value().(string); ok {
+			modem.Manufacturer = v
+		}
 	}
 
 	// 尝试获取 MSISDN

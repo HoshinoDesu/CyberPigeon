@@ -2,6 +2,7 @@ package modem
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -104,10 +105,9 @@ func (msg *Messaging) retrieveWithConn(conn *dbus.Conn, objectPath dbus.ObjectPa
 		return nil, fmt.Errorf("短信时间字段类型错误")
 	}
 	if t != "" {
-		// 处理时区格式（+08:00 需要转为 +08:00）
-		if len(t) >= 3 && (t[len(t)-3] == '+' || t[len(t)-3] == '-') {
-			t = t + ":00"
-		}
+		// 处理短时区格式，如 "+08" -> "+08:00"、"-05" -> "-05:00"
+		shortTZPattern := regexp.MustCompile(`([+-]\d{2})$`)
+		t = shortTZPattern.ReplaceAllString(t, "${1}:00")
 		sms.Timestamp, err = time.Parse(time.RFC3339, t)
 		if err != nil {
 			return nil, err

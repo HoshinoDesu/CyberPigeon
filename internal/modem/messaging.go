@@ -70,7 +70,7 @@ func (msg *Messaging) Subscribe(ctx context.Context, subscriber func(message *SM
 	for {
 		select {
 		case sig := <-signalChan:
-			if len(sig.Body) < 2 {
+			if sig == nil || len(sig.Body) < 2 {
 				continue
 			}
 			// Body[0] 是 ObjectPath, Body[1] 是 bool (received)
