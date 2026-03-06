@@ -5,6 +5,7 @@ sms-forwarder-linux-arm64
 *.exe
 dist/
 dist-min/
+dist-release/
 
 # 配置文件
 config.toml
