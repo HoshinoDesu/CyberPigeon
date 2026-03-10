@@ -46,3 +46,6 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 
 - 程序依赖 ModemManager，请确保运行环境已安装并运行 ModemManager 服务。
 - 请确保有足够的权限访问 DBus 系统总线。
+
+## 仓库 Star 历史
+[![Stargazers over time](https://starchart.cc/HoshinoDesu/CyberPigeon.svg?variant=adaptive)](https://starchart.cc/HoshinoDesu/CyberPigeon)
