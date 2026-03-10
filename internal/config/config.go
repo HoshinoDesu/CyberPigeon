@@ -2,17 +2,22 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
 
 // Config 主配置结构
 type Config struct {
-	Storage  StorageConfig   `toml:"storage"`
-	Server   ServerConfig    `toml:"server"`
-	Channels []ChannelConfig `toml:"channels"`
+	DeviceName        string          `toml:"device_name"`          // 当前设备名，用于展示在短信模板中
+	DeviceNameInTitle bool            `toml:"device_name_in_title"` // 设备名是否出现在推送标题中
+	DeviceNameInBody  bool            `toml:"device_name_in_body"`  // 设备名是否出现在推送正文中
+	Storage           StorageConfig   `toml:"storage"`
+	Server            ServerConfig    `toml:"server"`
+	Channels          []ChannelConfig `toml:"channels"`
 }
 
 // StorageConfig 存储配置
@@ -96,7 +101,32 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件: %w", err)
 	}
 
+	// 确保配置文件包含所有字段，自动补全缺失项并回写
+	if cfg.ensureDefaults() {
+		if err := cfg.Save(path); err != nil {
+			slog.Warn("自动补全配置后回写失败", "error", err)
+		}
+	}
+
 	return &cfg, nil
+}
+
+// ensureDefaults 检查并补全缺失的配置项，返回是否有变更
+func (c *Config) ensureDefaults() bool {
+	changed := false
+	if c.Server.Listen == "" {
+		c.Server.Listen = ":8080"
+		changed = true
+	}
+	if c.Storage.Path == "" && c.Storage.Enabled {
+		c.Storage.Path = "./sms.db"
+		changed = true
+	}
+	if strings.HasSuffix(c.Storage.Path, ".json") {
+		c.Storage.Path = strings.TrimSuffix(c.Storage.Path, ".json") + ".db"
+		changed = true
+	}
+	return changed
 }
 
 // channelToMap 将通道配置转换为 map，只包含该类型通道的相关字段
@@ -202,13 +232,19 @@ func (c *Config) Save(path string) error {
 
 	// 构建用于保存的配置，过滤掉每个通道不相关的字段
 	saveConfig := struct {
-		Storage  StorageConfig `toml:"storage"`
-		Server   ServerConfig  `toml:"server"`
-		Channels []any         `toml:"channels"`
+		DeviceName        string        `toml:"device_name"`
+		DeviceNameInTitle bool          `toml:"device_name_in_title"`
+		DeviceNameInBody  bool          `toml:"device_name_in_body"`
+		Storage           StorageConfig `toml:"storage"`
+		Server            ServerConfig  `toml:"server"`
+		Channels          []any         `toml:"channels"`
 	}{
-		Storage:  c.Storage,
-		Server:   c.Server,
-		Channels: make([]any, 0, len(c.Channels)),
+		DeviceName:        c.DeviceName,
+		DeviceNameInTitle: c.DeviceNameInTitle,
+		DeviceNameInBody:  c.DeviceNameInBody,
+		Storage:           c.Storage,
+		Server:            c.Server,
+		Channels:          make([]any, 0, len(c.Channels)),
 	}
 
 	for _, ch := range c.Channels {

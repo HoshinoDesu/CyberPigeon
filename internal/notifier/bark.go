@@ -31,10 +31,7 @@ func (b *BarkChannel) Type() string {
 
 // Send 发送 Bark 通知
 func (b *BarkChannel) Send(msg Message) error {
-	title := msg.From
-	if title == "" {
-		title = "未知号码"
-	}
+	title := msg.Title()
 
 	payload := map[string]interface{}{
 		"title": title,

@@ -325,12 +325,15 @@ func (f *Forwarder) formatMessage(m *modem.Modem, sms *modem.SMS) notifier.Messa
 	modemName := f.getModemName(m)
 
 	return notifier.Message{
-		Modem:     modemName,
-		From:      sender,
-		To:        recipient,
-		Timestamp: sms.Timestamp,
-		Text:      strings.TrimSpace(sms.Text),
-		Incoming:  incoming,
+		Modem:             modemName,
+		DeviceName:        f.cfg.DeviceName,
+		ShowDeviceInTitle: f.cfg.DeviceNameInTitle,
+		ShowDeviceInBody:  f.cfg.DeviceNameInBody,
+		From:              sender,
+		To:                recipient,
+		Timestamp:         sms.Timestamp,
+		Text:              strings.TrimSpace(sms.Text),
+		Incoming:          incoming,
 	}
 }
 

@@ -35,10 +35,7 @@ func (g *GotifyChannel) Type() string {
 // Send 发送 Gotify 通知
 func (g *GotifyChannel) Send(msg Message) error {
 	url := fmt.Sprintf("%s/message", g.cfg.Endpoint)
-	title := msg.From
-	if title == "" {
-		title = "未知号码"
-	}
+	title := msg.Title()
 
 	payload := map[string]interface{}{
 		"title":    title,

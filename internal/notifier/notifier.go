@@ -12,16 +12,40 @@ import (
 
 // Message 通知消息
 type Message struct {
-	Modem     string
-	From      string
-	To        string
-	Timestamp time.Time
-	Text      string
-	Incoming  bool
+	Modem             string
+	DeviceName        string
+	ShowDeviceInTitle bool
+	ShowDeviceInBody  bool
+	From              string
+	To                string
+	Timestamp         time.Time
+	Text              string
+	Incoming          bool
+}
+
+// Title 返回推送标题；若启用了设备名在标题，格式为 "NUMBER - 设备名"
+func (m Message) Title() string {
+	title := m.From
+	if title == "" {
+		title = "未知号码"
+	}
+	if m.ShowDeviceInTitle && m.DeviceName != "" {
+		title = title + " - " + m.DeviceName
+	}
+	return title
 }
 
 // String 返回纯文本格式
 func (m Message) String() string {
+	if m.ShowDeviceInBody && m.DeviceName != "" {
+		return fmt.Sprintf(
+			"%s\n\n发送人: %s\n时间: %s\n\n设备: %s",
+			m.displayText(),
+			m.From,
+			m.formatTimestamp(),
+			m.DeviceName,
+		)
+	}
 	return fmt.Sprintf(
 		"%s\n\n发送人: %s\n时间: %s",
 		m.displayText(),
@@ -42,6 +66,25 @@ func (m Message) formatTimestamp() string {
 		return "未知"
 	}
 	return m.Timestamp.Format("2006-01-02 15:04:05")
+}
+
+// Markdown 返回 Markdown 格式（用于 ServerChan 等 Markdown 渠道）
+func (m Message) Markdown() string {
+	if m.ShowDeviceInBody && m.DeviceName != "" {
+		return fmt.Sprintf(
+			"%s\n\n**发送人:** %s  \n**时间:** %s  \n**设备:** %s",
+			m.displayText(),
+			m.From,
+			m.formatTimestamp(),
+			m.DeviceName,
+		)
+	}
+	return fmt.Sprintf(
+		"%s\n\n**发送人:** %s  \n**时间:** %s",
+		m.displayText(),
+		m.From,
+		m.formatTimestamp(),
+	)
 }
 
 // Notifier 通知器

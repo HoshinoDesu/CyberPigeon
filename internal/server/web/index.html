@@ -307,7 +307,7 @@
         }
 
         .channel-card:hover {
-            border-color: var(--border-secondary);
+            border-color: rgba(59, 130, 246, 0.25);
             box-shadow: var(--shadow-sm);
         }
 
@@ -388,6 +388,12 @@
             opacity: 0.6;
             cursor: not-allowed;
             background: var(--bg-secondary);
+        }
+
+        .field-hint {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            line-height: 1.4;
         }
         
         select.field-input {
@@ -477,7 +483,7 @@
 
         .modem-item:hover {
             transform: translateY(-2px);
-            border-color: var(--border-secondary);
+            border-color: rgba(59, 130, 246, 0.25);
         }
 
         .modem-name {
@@ -695,7 +701,7 @@
         .message-item:hover {
             background: var(--bg-primary);
             box-shadow: var(--shadow-sm);
-            border-color: var(--border-secondary);
+            border-color: rgba(59, 130, 246, 0.25);
             transform: translateY(-1px);
         }
 
@@ -1261,6 +1267,29 @@
                                         <div v-if="getUssdState(modem.imei).error" class="ussd-error">{{ getUssdState(modem.imei).error }}</div>
                                         <div class="ussd-result" v-if="getUssdState(modem.imei).result">{{ getUssdState(modem.imei).result }}</div>
                                     </div>
+
+                                    <!-- 本机设备名 -->
+                                    <div class="ussd-section">
+                                        <div class="ussd-header">本机设备名</div>
+                                        <div class="ussd-input-group">
+                                            <input class="ussd-input" v-model="settings.device_name"
+                                                placeholder="例如：土豆服务器" />
+                                            <button class="ussd-btn" @click="saveSettings" :disabled="settingsSaving">
+                                                {{ settingsSaving ? '保存中...' : '保存' }}
+                                            </button>
+                                        </div>
+                                        <div style="display: flex; gap: 16px; margin-top: 8px;">
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+                                                <input type="checkbox" v-model="settings.device_name_in_title" />
+                                                显示在推送标题
+                                            </label>
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+                                                <input type="checkbox" v-model="settings.device_name_in_body" />
+                                                显示在推送正文
+                                            </label>
+                                        </div>
+                                        <div class="field-hint" style="margin-top: 8px;">勾选后设备名将出现在对应位置</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1516,6 +1545,8 @@
                             </button>
                         </div>
                     </div>
+
+
                 </div>
             </div>
 
@@ -1664,11 +1695,17 @@
                 const wsConnected = ref(false);
                 const newChannelType = ref('');
 
+                // ── 设置状态 ──
+                const settings = ref({ device_name: '', device_name_in_title: false, device_name_in_body: false });
+                const settingsLoading = ref(false);
+                const settingsSaving = ref(false);
+                const settingsError = ref(null);
+
                 // ── USSD（按 IMEI 独立管理每台设备的状态）──
                 const ussdStates = ref({});
                 const getUssdState = (imei) => {
                     if (!ussdStates.value[imei]) {
-                        ussdStates.value[imei] = { code: '*#100#', result: '', loading: false, error: '' };
+                        ussdStates.value[imei] = { code: '', result: '', loading: false, error: '' };
                     }
                     return ussdStates.value[imei];
                 };
@@ -1956,6 +1993,43 @@
                     }
                 };
 
+                const loadSettings = async () => {
+                    try {
+                        settingsLoading.value = true;
+                        settingsError.value = null;
+                        const res = await fetch('/api/settings');
+                        if (!res.ok) throw new Error('加载失败');
+                        const data = await res.json();
+                        settings.value.device_name = data.device_name || '';
+                        settings.value.device_name_in_title = !!data.device_name_in_title;
+                        settings.value.device_name_in_body = !!data.device_name_in_body;
+                    } catch (e) {
+                        settingsError.value = '加载设置失败: ' + e.message;
+                    } finally {
+                        settingsLoading.value = false;
+                    }
+                };
+
+                const saveSettings = async () => {
+                    try {
+                        settingsSaving.value = true;
+                        const res = await fetch('/api/settings/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settings.value)
+                        });
+                        if (!res.ok) {
+                            const text = await res.text();
+                            throw new Error(text || '保存失败');
+                        }
+                        showToast('设置已保存成功', 'success');
+                    } catch (e) {
+                        showToast('保存设置失败: ' + e.message, 'error', 5000);
+                    } finally {
+                        settingsSaving.value = false;
+                    }
+                };
+
                 const saveChannels = async () => {
                     try {
                         channelsSaving.value = true;
@@ -2113,6 +2187,7 @@
                     watchSystemTheme();
                     loadModems();
                     loadMessages();
+                    loadSettings();
                     connectWebSocket();
                     refreshTimer = setInterval(refresh, 30000);
                 });
@@ -2128,9 +2203,10 @@
                 });
 
                 return {
-                    modems, messages, channelsList,
+                    modems, messages, channelsList, settings,
                     modemsLoading, messagesLoading, loadingMore, hasMoreMessages,
                     channelsLoading, modemsError, messagesError, channelsError,
+                    settingsLoading, settingsSaving, settingsError,
                     lastUpdate, sidebarOpen, activeTab, theme, themeLabel,
                     searchQuery, filteredMessages,
                     showDeleteModal, messageToDelete,
@@ -2143,7 +2219,8 @@
                     validateUSSD, showToast,
                     toggleSidebar, closeSidebar, switchToChannels, toggleTheme,
                     confirmDelete, cancelDelete, deleteMessage,
-                    saveChannels, testAllChannels, runUSSD, loadMoreMessages
+                    saveChannels, testAllChannels, runUSSD, loadMoreMessages,
+                    loadSettings, saveSettings
                 };
             }
         })

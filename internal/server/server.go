@@ -98,6 +98,8 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/api/channels/test", s.handleTestChannel)
 	mux.HandleFunc("/api/ussd", s.handleUSSD)
 	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/settings/save", s.handleSaveSettings)
 
 	// 静态文件 - 使用 web 子目录
 	webFS, err := fs.Sub(webFiles, "web")
@@ -456,11 +458,14 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 
 	// 创建测试消息
 	testMsg := notifier.Message{
-		Modem:     "测试设备",
-		From:      "测试号码",
-		Text:      "这是一条测试推送消息，如果您收到此消息，说明推送通道配置正确。",
-		Timestamp: time.Now(),
-		Incoming:  true,
+		Modem:             "测试设备",
+		DeviceName:        s.cfg.DeviceName,
+		ShowDeviceInTitle: s.cfg.DeviceNameInTitle,
+		ShowDeviceInBody:  s.cfg.DeviceNameInBody,
+		From:              "测试号码",
+		Text:              "这是一条测试推送消息，如果您收到此消息，说明推送通道配置正确。",
+		Timestamp:         time.Now(),
+		Incoming:          true,
 	}
 
 	// 发送测试消息
@@ -572,4 +577,50 @@ func (s *Server) BroadcastMessage(msg storage.Message) {
 			_ = client.Close()
 		}
 	}
+}
+
+// handleSettings 处理获取系统设置请求
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"device_name":          s.cfg.DeviceName,
+		"device_name_in_title": s.cfg.DeviceNameInTitle,
+		"device_name_in_body":  s.cfg.DeviceNameInBody,
+	})
+}
+
+// handleSaveSettings 处理保存系统设置请求
+func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		DeviceName        string `json:"device_name"`
+		DeviceNameInTitle bool   `json:"device_name_in_title"`
+		DeviceNameInBody  bool   `json:"device_name_in_body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.cfg.DeviceName = req.DeviceName
+	s.cfg.DeviceNameInTitle = req.DeviceNameInTitle
+	s.cfg.DeviceNameInBody = req.DeviceNameInBody
+
+	// 保存到配置文件
+	if err := s.cfg.Save(s.configPath); err != nil {
+		http.Error(w, "Failed to save config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

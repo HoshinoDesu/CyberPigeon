@@ -36,10 +36,7 @@ func (e *EmailChannel) Type() string {
 
 // Send 发送邮件
 func (e *EmailChannel) Send(msg Message) error {
-	subject := msg.From
-	if subject == "" {
-		subject = "未知号码"
-	}
+	subject := msg.Title()
 	// RFC 2047 编码 Subject，防止非 ASCII 字符乱码
 	encodedSubject := mime.QEncoding.Encode("UTF-8", subject)
 	body := msg.String()

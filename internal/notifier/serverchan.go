@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	serverchan_sdk "github.com/easychen/serverchan-sdk-golang"
 	"github.com/CyberPigeon/internal/config"
+	serverchan_sdk "github.com/easychen/serverchan-sdk-golang"
 )
 
 // ServerChanChannel ServerChan 通道
@@ -32,11 +32,8 @@ func (s *ServerChanChannel) Type() string {
 
 // Send 发送 ServerChan 通知（带超时控制）
 func (s *ServerChanChannel) Send(msg Message) error {
-	title := msg.From
-	if title == "" {
-		title = "未知号码"
-	}
-	markdown := msg.String()
+	title := msg.Title()
+	markdown := msg.Markdown()
 
 	type result struct {
 		resp *serverchan_sdk.ScSendResponse
