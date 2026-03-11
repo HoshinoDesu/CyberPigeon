@@ -25,16 +25,22 @@ import (
 //go:embed web/*
 var webFiles embed.FS
 
+// wsClient 封装 WebSocket 连接及其独立写锁
+type wsClient struct {
+	conn    *websocket.Conn
+	writeMu sync.Mutex
+}
+
 // Server Web 服务器
 type Server struct {
 	cfg        *config.Config
+	cfgMu      sync.RWMutex
 	forwarder  *forwarder.Forwarder
 	storage    *storage.Storage
 	server     *http.Server
 	configPath string
-	clients    map[*websocket.Conn]bool
+	clients    map[*wsClient]bool
 	clientsMu  sync.RWMutex
-	writeMu    sync.Mutex // 保护 WebSocket 并发写
 	upgrader   websocket.Upgrader
 }
 
@@ -45,7 +51,7 @@ func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, c
 		forwarder:  fwd,
 		storage:    store,
 		configPath: configPath,
-		clients:    make(map[*websocket.Conn]bool),
+		clients:    make(map[*wsClient]bool),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, cfg.Server.AllowedOrigins) },
 		},
@@ -149,6 +155,8 @@ type ModemInfo struct {
 	OperatorName  string `json:"operator_name"`
 	ICCID         string `json:"iccid"`
 }
+
+const maxRequestBodySize = 1 << 20 // 1MB
 
 // handleModems 处理调制解调器信息请求
 func (s *Server) handleModems(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +269,7 @@ func (s *Server) handleUSSD(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendError(w, "Invalid request", http.StatusBadRequest)
 		return
@@ -323,6 +332,7 @@ func (s *Server) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		ID string `json:"id"`
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
@@ -381,11 +391,29 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 			Enabled:           false,
 			RequestTimeoutSec: 10,
 		},
+		"feishu": {
+			Type:              "feishu",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
+			ReceiveIDType:     "open_id",
+		},
+		"dingtalk": {
+			Type:              "dingtalk",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
+		},
+		"telegram": {
+			Type:              "telegram",
+			Enabled:           false,
+			RequestTimeoutSec: 10,
+		},
 	}
 
 	// 以配置文件中的通道为基础，保留所有已配置的通道（含同类型多个）
+	s.cfgMu.RLock()
 	channels := make([]config.ChannelConfig, len(s.cfg.Channels))
 	copy(channels, s.cfg.Channels)
+	s.cfgMu.RUnlock()
 
 	// 记录已配置的类型
 	configuredTypes := make(map[string]bool)
@@ -412,6 +440,7 @@ func (s *Server) handleSaveChannels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var channels []config.ChannelConfig
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&channels); err != nil {
 		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
 		return
@@ -424,8 +453,11 @@ func (s *Server) handleSaveChannels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 保存到配置文件
-	if err := s.cfg.Save(s.configPath); err != nil {
-		http.Error(w, "Failed to save config: "+err.Error(), http.StatusInternalServerError)
+	s.cfgMu.Lock()
+	saveErr := s.cfg.Save(s.configPath)
+	s.cfgMu.Unlock()
+	if saveErr != nil {
+		http.Error(w, "Failed to save config: "+saveErr.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -441,6 +473,7 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var channels []config.ChannelConfig
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&channels); err != nil {
 		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
 		return
@@ -457,6 +490,7 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建测试消息
+	s.cfgMu.RLock()
 	testMsg := notifier.Message{
 		Modem:             "测试设备",
 		DeviceName:        s.cfg.DeviceName,
@@ -467,6 +501,7 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 		Timestamp:         time.Now(),
 		Incoming:          true,
 	}
+	s.cfgMu.RUnlock()
 
 	// 发送测试消息
 	if err := n.Send(testMsg); err != nil {
@@ -489,9 +524,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client := &wsClient{conn: conn}
+
 	// 注册客户端
 	s.clientsMu.Lock()
-	s.clients[conn] = true
+	s.clients[client] = true
 	s.clientsMu.Unlock()
 
 	slog.Info("WebSocket 客户端连接", "remote", r.RemoteAddr)
@@ -499,7 +536,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// 客户端断开时清理
 	defer func() {
 		s.clientsMu.Lock()
-		delete(s.clients, conn)
+		delete(s.clients, client)
 		s.clientsMu.Unlock()
 		conn.Close()
 		slog.Info("WebSocket 客户端断开", "remote", r.RemoteAddr)
@@ -525,9 +562,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case <-ticker.C:
-				s.writeMu.Lock()
+				client.writeMu.Lock()
 				err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second))
-				s.writeMu.Unlock()
+				client.writeMu.Unlock()
 				if err != nil {
 					return
 				}
@@ -559,22 +596,22 @@ func (s *Server) BroadcastMessage(msg storage.Message) {
 	}
 
 	s.clientsMu.RLock()
-	clients := make([]*websocket.Conn, 0, len(s.clients))
+	clients := make([]*wsClient, 0, len(s.clients))
 	for client := range s.clients {
 		clients = append(clients, client)
 	}
 	s.clientsMu.RUnlock()
 
 	for _, client := range clients {
-		s.writeMu.Lock()
-		err := client.WriteMessage(websocket.TextMessage, data)
-		s.writeMu.Unlock()
+		client.writeMu.Lock()
+		err := client.conn.WriteMessage(websocket.TextMessage, data)
+		client.writeMu.Unlock()
 		if err != nil {
 			slog.Error("发送 WebSocket 消息失败", "error", err)
 			s.clientsMu.Lock()
 			delete(s.clients, client)
 			s.clientsMu.Unlock()
-			_ = client.Close()
+			_ = client.conn.Close()
 		}
 	}
 }
@@ -586,12 +623,14 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.cfgMu.RLock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"device_name":          s.cfg.DeviceName,
 		"device_name_in_title": s.cfg.DeviceNameInTitle,
 		"device_name_in_body":  s.cfg.DeviceNameInBody,
 	})
+	s.cfgMu.RUnlock()
 }
 
 // handleSaveSettings 处理保存系统设置请求
@@ -606,20 +645,24 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		DeviceNameInTitle bool   `json:"device_name_in_title"`
 		DeviceNameInBody  bool   `json:"device_name_in_body"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	s.cfgMu.Lock()
 	s.cfg.DeviceName = req.DeviceName
 	s.cfg.DeviceNameInTitle = req.DeviceNameInTitle
 	s.cfg.DeviceNameInBody = req.DeviceNameInBody
 
 	// 保存到配置文件
 	if err := s.cfg.Save(s.configPath); err != nil {
+		s.cfgMu.Unlock()
 		http.Error(w, "Failed to save config: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.cfgMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})

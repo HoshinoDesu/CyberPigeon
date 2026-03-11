@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,7 +38,29 @@ func NewWebhookChannel(cfg config.ChannelConfig) (*WebhookChannel, error) {
 	if cfg.Method == "" {
 		cfg.Method = "POST"
 	}
-	return &WebhookChannel{cfg: cfg, client: newHTTPClient(cfg)}, nil
+	client := newHTTPClient(cfg)
+	if !cfg.AllowPrivateNetwork {
+		client.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, fmt.Errorf("解析地址失败: %w", err)
+				}
+				ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+				if err != nil {
+					return nil, fmt.Errorf("DNS 解析失败: %w", err)
+				}
+				for _, ip := range ips {
+					if isPrivateIP(ip.IP) {
+						return nil, fmt.Errorf("Webhook 不允许连接私网地址 %s", ip.IP)
+					}
+				}
+				var d net.Dialer
+				return d.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+			},
+		}
+	}
+	return &WebhookChannel{cfg: cfg, client: client}, nil
 }
 
 func isPrivateOrLocalHost(host string) bool {

@@ -211,6 +211,7 @@ func (s *Storage) SetMessageHandler(handler func(Message)) {
 func (s *Storage) List() []Message {
 	rows, err := s.db.Query("SELECT id, modem, number, text, timestamp, saved FROM messages ORDER BY timestamp ASC")
 	if err != nil {
+		slog.Error("查询消息列表失败", "error", err)
 		return []Message{}
 	}
 	defer rows.Close()

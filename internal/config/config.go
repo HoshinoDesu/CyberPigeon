@@ -222,6 +222,12 @@ func channelToMap(ch ChannelConfig) map[string]any {
 
 // Save 保存配置到文件（原子写入：先写临时文件，再重命名）
 func (c *Config) Save(path string) error {
+	// 读取原始文件权限，保存后保持一致
+	var perm os.FileMode = 0600
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	}
+
 	// 在目标文件同目录创建临时文件，确保同一文件系统以支持原子 Rename
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, ".config-*.toml.tmp")
@@ -261,6 +267,11 @@ func (c *Config) Save(path string) error {
 	if err := tmpFile.Close(); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("关闭临时文件: %w", err)
+	}
+
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("设置文件权限: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {

@@ -140,6 +140,7 @@ func (e *EmailChannel) sendWithSTARTTLS(addr string, auth smtp.Auth, message str
 func (e *EmailChannel) sendViaClient(conn net.Conn, auth smtp.Auth, message string) error {
 	client, err := smtp.NewClient(conn, e.cfg.Host)
 	if err != nil {
+		conn.Close()
 		return fmt.Errorf("创建 SMTP 客户端失败: %w", err)
 	}
 	defer client.Quit()
