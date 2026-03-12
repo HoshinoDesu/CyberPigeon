@@ -34,7 +34,7 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 
 ## 文档
 
-- API 用例文档：`docs/api-examples.md`
+- API 用例文档：[docs/api-examples.md](docs/api-examples.md)
 
 ## 运行
 
@@ -65,7 +65,7 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 
 程序默认监听端口可在配置文件中修改。
 
-常用接口调用示例见 `docs/api-examples.md`。
+常用接口调用示例见 [docs/api-examples.md](docs/api-examples.md)。
 
 ## 注意事项
 

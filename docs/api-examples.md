@@ -2,7 +2,25 @@
 
 本文档整理了 Web 控制台和自动化脚本常用的 API 调用示例。
 
-说明：文中的 IMEI、号码、ICCID、验证码、Token 和 Chat ID 均为脱敏后的示例占位值，请替换成你自己的实际参数。
+## 接口总览
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/auth/status` | 查询当前认证状态 |
+| POST | `/api/auth/setup` | 首次设置管理密码 |
+| POST | `/api/auth/login` | 登录并获取会话 |
+| POST | `/api/auth/logout` | 退出登录并清除会话 |
+| POST | `/api/auth/change-password` | 修改管理密码 |
+| GET | `/api/modems` | 获取设备列表 |
+| GET | `/api/messages` | 分页获取短信列表 |
+| POST | `/api/messages/delete` | 删除指定短信 |
+| GET | `/api/settings` | 获取系统设置 |
+| POST | `/api/settings/save` | 保存系统设置 |
+| POST | `/api/ussd` | 在指定设备上执行 USSD |
+| GET | `/api/channels` | 获取推送通道配置 |
+| POST | `/api/channels/save` | 保存推送通道配置 |
+| POST | `/api/channels/test` | 发送测试推送 |
+| WS | `/ws` | WebSocket 实时推送连接 |
 
 ## 基本说明
 
@@ -10,6 +28,7 @@
 - 当启用管理密码后，除认证状态接口外，其余 `/api/*` 都需要先登录。
 - 登录成功后，服务端通过 Cookie `cyberpigeon_session` 维持会话。
 - 下方示例统一使用 `curl` 的 `cookies.txt` 保存和复用会话。
+- `/ws` 也受登录态保护，未登录或未完成初始化时无法建立连接。
 
 ## 1. 查询认证状态
 
