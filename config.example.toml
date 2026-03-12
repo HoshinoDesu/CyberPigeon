@@ -1,9 +1,9 @@
-# SMS 转发器配置文件
+# CyberPigeon 配置文件
 
 # 存储配置
 [storage]
 enabled = true
-path = "./sms.json"  # 短信保存路径
+path = "./sms.db"  # 短信保存路径
 
 # Web 服务器配置
 [server]
