@@ -1,0 +1,2 @@
+# Exclude embedded single-file web UI from GitHub language stats.
+internal/server/web/index.html linguist-vendored
