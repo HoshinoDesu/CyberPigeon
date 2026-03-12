@@ -32,6 +32,10 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 1. 将 `config.example.toml` 重命名为 `config.toml`。
 2. 编辑 `config.toml` 文件，配置短信转发通道和相关参数。
 
+## 文档
+
+- API 用例文档：`docs/api-examples.md`
+
 ## 运行
 
 直接运行编译后的二进制文件：
@@ -60,6 +64,8 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 - 程序执行完成后立即退出
 
 程序默认监听端口可在配置文件中修改。
+
+常用接口调用示例见 `docs/api-examples.md`。
 
 ## 注意事项
 

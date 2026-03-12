@@ -29,3 +29,6 @@ vendor/
 *.swo
 *~
 build/
+
+# Local Copilot customization
+.github/
