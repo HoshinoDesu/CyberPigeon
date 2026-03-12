@@ -40,6 +40,25 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 ./CyberPigeon-linux-arm64
 ```
 
+如忘记 Web 管理密码，可直接在 shell 中执行：
+
+```bash
+./CyberPigeon-linux-arm64 --reset-password 新密码
+```
+
+如需避免密码出现在 shell 历史或进程参数中，建议改用安全输入模式：
+
+```bash
+./CyberPigeon-linux-arm64 --reset-password -
+```
+
+随后程序会提示你在终端中输入新密码；也可以通过标准输入传入。
+
+执行后会：
+- 直接重置管理密码
+- 清空所有现有登录会话
+- 程序执行完成后立即退出
+
 程序默认监听端口可在配置文件中修改。
 
 ## 注意事项

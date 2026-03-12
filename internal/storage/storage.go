@@ -44,16 +44,18 @@ func New(path string) (*Storage, error) {
 		}
 	}
 
-	db, err := sql.Open("sqlite", path)
+	// 通过 DSN 参数为所有连接设置 WAL 模式和繁忙超时（5 秒），
+	// 确保连接池中每条连接都应用这些 PRAGMA，而不仅仅是初始化连接。
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL", path)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库: %w", err)
 	}
 
-	// 启用 WAL 模式提升并发性能
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("设置 WAL 模式: %w", err)
-	}
+	// SQLite 不支持真正的多写并发，限制为单一连接避免 "database is locked"。
+	// WAL 模式下单连接仍允许读写并发，性能影响极小。
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	// 创建表
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS messages (
@@ -70,6 +72,23 @@ func New(path string) (*Storage, error) {
 
 	// 创建索引加速按时间排序查询
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)")
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS app_settings (
+		key        TEXT PRIMARY KEY,
+		value      TEXT NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("创建设置表: %w", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS sessions (
+		token_hash TEXT PRIMARY KEY,
+		expires_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("创建会话表: %w", err)
+	}
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
 
 	s := &Storage{db: db}
 

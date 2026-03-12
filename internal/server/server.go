@@ -33,25 +33,27 @@ type wsClient struct {
 
 // Server Web 服务器
 type Server struct {
-	cfg        *config.Config
-	cfgMu      sync.RWMutex
-	forwarder  *forwarder.Forwarder
-	storage    *storage.Storage
-	server     *http.Server
-	configPath string
-	clients    map[*wsClient]bool
-	clientsMu  sync.RWMutex
-	upgrader   websocket.Upgrader
+	cfg         *config.Config
+	cfgMu       sync.RWMutex
+	forwarder   *forwarder.Forwarder
+	storage     *storage.Storage
+	server      *http.Server
+	configPath  string
+	clients     map[*wsClient]bool
+	clientsMu   sync.RWMutex
+	upgrader    websocket.Upgrader
+	authLimiter *authRateLimiter
 }
 
 // New 创建服务器
 func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, configPath string) *Server {
 	return &Server{
-		cfg:        cfg,
-		forwarder:  fwd,
-		storage:    store,
-		configPath: configPath,
-		clients:    make(map[*wsClient]bool),
+		cfg:         cfg,
+		forwarder:   fwd,
+		storage:     store,
+		configPath:  configPath,
+		clients:     make(map[*wsClient]bool),
+		authLimiter: newAuthRateLimiter(5, 15*time.Minute),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, cfg.Server.AllowedOrigins) },
 		},
@@ -96,16 +98,21 @@ func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	// API 路由
-	mux.HandleFunc("/api/modems", s.handleModems)
-	mux.HandleFunc("/api/messages", s.handleMessages)
-	mux.HandleFunc("/api/messages/delete", s.handleDeleteMessage)
-	mux.HandleFunc("/api/channels", s.handleChannels)
-	mux.HandleFunc("/api/channels/save", s.handleSaveChannels)
-	mux.HandleFunc("/api/channels/test", s.handleTestChannel)
-	mux.HandleFunc("/api/ussd", s.handleUSSD)
+	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/setup", s.handleAuthSetup)
+	mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("/api/auth/change-password", s.handleAuthChangePassword)
+	mux.HandleFunc("/api/modems", s.withAPIAuth(s.handleModems))
+	mux.HandleFunc("/api/messages", s.withAPIAuth(s.handleMessages))
+	mux.HandleFunc("/api/messages/delete", s.withAPIAuth(s.handleDeleteMessage))
+	mux.HandleFunc("/api/channels", s.withAPIAuth(s.handleChannels))
+	mux.HandleFunc("/api/channels/save", s.withAPIAuth(s.handleSaveChannels))
+	mux.HandleFunc("/api/channels/test", s.withAPIAuth(s.handleTestChannel))
+	mux.HandleFunc("/api/ussd", s.withAPIAuth(s.handleUSSD))
 	mux.HandleFunc("/ws", s.handleWebSocket)
-	mux.HandleFunc("/api/settings", s.handleSettings)
-	mux.HandleFunc("/api/settings/save", s.handleSaveSettings)
+	mux.HandleFunc("/api/settings", s.withAPIAuth(s.handleSettings))
+	mux.HandleFunc("/api/settings/save", s.withAPIAuth(s.handleSaveSettings))
 
 	// 静态文件 - 使用 web 子目录
 	webFS, err := fs.Sub(webFiles, "web")
@@ -518,6 +525,31 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 
 // handleWebSocket 处理 WebSocket 连接
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	authenticated, err := s.isAuthenticated(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if s.storage != nil {
+		requiresSetup, err := s.requiresPasswordSetup()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if requiresSetup || !authenticated {
+			state := authStatus{AuthEnabled: true, RequiresSetup: requiresSetup, Authenticated: false}
+			code := http.StatusUnauthorized
+			if requiresSetup {
+				code = http.StatusPreconditionRequired
+				state.Message = "当前实例尚未设置管理密码，请先完成初始化"
+			} else {
+				state.Message = "登录已失效，请重新登录"
+			}
+			writeAuthState(w, code, state)
+			return
+		}
+	}
+
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("WebSocket 升级失败", "error", err)

@@ -368,6 +368,7 @@
         }
 
         .field-input {
+            box-sizing: border-box;
             background: var(--bg-tertiary);
             border: 1px solid var(--border-primary);
             color: var(--text-primary);
@@ -376,6 +377,7 @@
             font-family: var(--font-family);
             transition: all 0.2s ease;
             border-radius: var(--radius-sm);
+            height: 38px;
         }
 
         .field-input:focus {
@@ -1107,13 +1109,18 @@
         /* 密码可见切换按钮调整 */
         .pwd-toggle-btn {
             position: absolute;
-            right: 10px;
+            right: 8px;
             top: 50%;
             transform: translateY(-50%);
             cursor: pointer;
             user-select: none;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
+            padding: 4px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: var(--text-tertiary);
             transition: color 0.2s;
         }
@@ -1169,6 +1176,31 @@
 
 <body>
     <div id="app" v-cloak>
+        <div v-if="authLoading" class="empty-state" style="min-height: 100vh;">
+            <div class="spinner"></div>
+            <div class="loading-text">正在检查登录状态...</div>
+        </div>
+        <div v-else-if="authEnabled && !authenticated" class="empty-state" style="min-height: 100vh; padding: 24px;">
+            <div style="width: 100%; max-width: 420px; background: var(--bg-secondary); border: 1px solid var(--border-primary); padding: 24px; border-radius: 12px; text-align: left; box-shadow: var(--shadow-medium);">
+                <div class="messages-title" style="margin-bottom: 8px;">{{ requiresSetup ? '设置管理密码' : '登录 CyberPigeon' }}</div>
+                <div class="field-hint" style="margin-bottom: 20px; line-height: 1.6;">
+                    {{ requiresSetup ? '检测到这是从旧版本升级而来，请先设置一个管理密码。' : (authMessage || '请输入管理密码以访问 Web 控制台和 API。') }}
+                </div>
+                <div class="field-group" style="margin-bottom: 24px;">
+                    <label class="field-label">密码</label>
+                    <password-input v-model="authPassword" placeholder="请输入密码" :alnum-only="true"></password-input>
+                    <div class="field-hint" style="margin-top: 8px;">至少 6 位，仅允许字母和数字。</div>
+                </div>
+                <div class="field-group" v-if="requiresSetup" style="margin-bottom: 24px;">
+                    <label class="field-label">确认密码</label>
+                    <password-input v-model="authPasswordConfirm" placeholder="再次输入密码" :alnum-only="true"></password-input>
+                </div>
+                <div v-if="authError" class="error-state" style="margin-bottom: 16px;">{{ authError }}</div>
+                <button class="save-channels-btn" @click="requiresSetup ? setupPassword() : login()" :disabled="authSubmitting">
+                    {{ authSubmitting ? (requiresSetup ? '设置中...' : '登录中...') : (requiresSetup ? '设置并进入' : '登录') }}
+                </button>
+            </div>
+        </div>
         <div class="app">
             <!-- 顶部栏 -->
             <div class="topbar">
@@ -1181,6 +1213,9 @@
                     </div>
                     <button class="theme-toggle" @click="toggleTheme">
                         {{ themeLabel }}
+                    </button>
+                    <button v-if="authEnabled && authenticated" class="theme-toggle" @click="logout">
+                        退出登录
                     </button>
                     <button class="modem-toggle" :class="{ active: sidebarOpen }" @click="toggleSidebar">
                         设置
@@ -1201,6 +1236,10 @@
                     <div class="sidebar-tab" :class="{ active: activeTab === 'devices' }"
                         @click="activeTab = 'devices'">
                         设备信息 ({{ modems.length }})
+                    </div>
+                    <div class="sidebar-tab" :class="{ active: activeTab === 'security' }"
+                        @click="activeTab = 'security'">
+                        安全设置
                     </div>
                     <div class="sidebar-tab" :class="{ active: activeTab === 'channels' }" @click="switchToChannels">
                         推送通道
@@ -1291,6 +1330,39 @@
                                         <div class="field-hint" style="margin-top: 8px;">勾选后设备名将出现在对应位置</div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 安全设置 -->
+                    <div class="tab-content" v-show="activeTab === 'security'">
+                        <div class="channel-card" style="margin-top: 0;">
+                            <div class="channel-header">
+                                <span class="channel-type-badge">管理密码</span>
+                            </div>
+                            <div class="channel-fields">
+                                <div class="field-group">
+                                    <label class="field-label">当前密码</label>
+                                    <password-input v-model="passwordForm.current_password" placeholder="输入当前密码" :alnum-only="true"></password-input>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">新密码</label>
+                                    <password-input v-model="passwordForm.new_password" placeholder="至少 6 位" :alnum-only="true"></password-input>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">确认新密码</label>
+                                    <password-input v-model="passwordForm.confirm_password" placeholder="再次输入新密码" :alnum-only="true"></password-input>
+                                </div>
+                                <div class="field-hint">
+                                    管理密码至少 6 位，仅允许字母和数字。
+                                </div>
+                                <div class="field-hint">
+                                    修改密码后，其他浏览器中的会话将全部失效，当前页面会自动续签。
+                                </div>
+                                <div v-if="passwordChangeError" class="error-state">{{ passwordChangeError }}</div>
+                                <button class="save-channels-btn" @click="changePassword" :disabled="passwordChanging">
+                                    {{ passwordChanging ? '修改中...' : '修改密码' }}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1633,31 +1705,46 @@
                 const { createApp, ref, onMounted, onUnmounted, computed } = Vue;
 
         const PasswordInput = {
-            props: ['modelValue', 'placeholder'],
+            props: {
+                modelValue: {
+                    type: String,
+                    default: ''
+                },
+                placeholder: {
+                    type: String,
+                    default: ''
+                },
+                alnumOnly: {
+                    type: Boolean,
+                    default: false
+                }
+            },
             emits: ['update:modelValue'],
-            setup() {
+            setup(props, { emit }) {
                 const showPwd = ref(false);
-                return { showPwd };
+                const handleInput = (event) => {
+                    let value = event.target.value;
+                    if (props.alnumOnly) {
+                        value = value.replace(/[^a-zA-Z0-9]/g, '');
+                        if (value !== event.target.value) {
+                            event.target.value = value;
+                        }
+                    }
+                    emit('update:modelValue', value);
+                };
+                return { showPwd, handleInput };
             },
             template: `
-                <div style="position: relative;">
+                <div style="position: relative; display: flex; align-items: center; width: 100%;">
                     <input :type="showPwd ? 'text' : 'password'"
-                        class="field-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)"
-                        :placeholder="placeholder" style="padding-right: 35px;" />
+                        class="field-input" :value="modelValue" @input="handleInput"
+                        :placeholder="placeholder" style="padding-right: 36px; width: 100%;" />
                     <span @click="showPwd = !showPwd" class="pwd-toggle-btn">
-                        <svg v-if="showPwd" xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            style="width: 100%; height: 100%; opacity: 0.6;">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                            <circle cx="12" cy="12" r="3"></circle>
+                        <svg v-if="showPwd" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" style="width: 100%; height: 100%; opacity: 0.6;">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M2.11069 9.43732C3.21647 7.77542 5.87904 4.58331 9.89458 4.58331C13.8801 4.58331 16.6483 7.72502 17.8345 9.4049C18.0905 9.76747 18.0905 10.2325 17.8345 10.5951C16.6483 12.2749 13.8801 15.4166 9.89458 15.4166C5.87904 15.4166 3.21647 12.2245 2.11069 10.5626C1.88009 10.2161 1.88009 9.7839 2.11069 9.43732ZM9.89458 3.33331C5.19832 3.33331 2.20919 7.03277 1.07001 8.74489C0.560324 9.51091 0.560323 10.4891 1.07001 11.2551C2.20919 12.9672 5.19832 16.6666 9.89458 16.6666C14.5412 16.6666 17.6368 13.0422 18.8556 11.3161C19.4168 10.5213 19.4168 9.4787 18.8556 8.68391C17.6368 6.95774 14.5412 3.33331 9.89458 3.33331ZM7.29165 9.99998C7.29165 8.50421 8.50421 7.29165 9.99998 7.29165C11.4958 7.29165 12.7083 8.50421 12.7083 9.99998C12.7083 11.4958 11.4958 12.7083 9.99998 12.7083C8.50421 12.7083 7.29165 11.4958 7.29165 9.99998ZM9.99998 6.04165C7.81385 6.04165 6.04165 7.81385 6.04165 9.99998C6.04165 12.1861 7.81385 13.9583 9.99998 13.9583C12.1861 13.9583 13.9583 12.1861 13.9583 9.99998C13.9583 7.81385 12.1861 6.04165 9.99998 6.04165Z" fill="currentColor"></path>
                         </svg>
-                        <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round"
-                            style="width: 100%; height: 100%; opacity: 0.6;">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" style="width: 100%; height: 100%; opacity: 0.6;">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M17.5753 6.85456C17.7122 6.71896 17.8939 6.63806 18.0866 6.63806C18.7321 6.63806 19.0436 7.42626 18.5748 7.87006C18.1144 8.30554 17.457 8.69885 16.6478 9.03168L18.1457 10.5296C18.2101 10.5941 18.2613 10.6706 18.2962 10.7548C18.331 10.839 18.349 10.9293 18.349 11.0204C18.349 11.1116 18.331 11.2019 18.2962 11.2861C18.2613 11.3703 18.2101 11.4468 18.1457 11.5113C18.0812 11.5757 18.0047 11.6269 17.9205 11.6618C17.8363 11.6967 17.746 11.7146 17.6548 11.7146C17.5637 11.7146 17.4734 11.6967 17.3892 11.6618C17.305 11.6269 17.2284 11.5757 17.164 11.5113L15.3409 9.68819C15.2898 9.63708 15.247 9.57838 15.2141 9.51428C14.4874 9.71293 13.6876 9.87122 12.8344 9.98119C12.8363 9.99011 12.8381 9.99908 12.8397 10.0081L13.2874 12.5472C13.315 12.7266 13.2713 12.9098 13.1656 13.0573C13.0598 13.2049 12.9005 13.3052 12.7217 13.3367C12.5429 13.3683 12.3589 13.3285 12.2091 13.2259C12.0592 13.1234 11.9555 12.9663 11.9202 12.7882L11.4725 10.2491C11.4645 10.2039 11.4611 10.1581 11.4621 10.1125C10.9858 10.1428 10.4976 10.1586 10.0002 10.1586C9.57059 10.1586 9.14778 10.1468 8.73362 10.1241C8.73477 10.1656 8.7322 10.2074 8.72578 10.249L8.27808 12.7881C8.24612 12.9694 8.14345 13.1306 7.99265 13.2362C7.84186 13.3418 7.65528 13.3831 7.47398 13.3512C7.29268 13.3192 7.1315 13.2166 7.0259 13.0658C6.9203 12.915 6.87892 12.7284 6.91088 12.5471L7.35858 10.008C7.35877 10.007 7.35896 10.0061 7.35915 10.0052C6.50085 9.90284 5.6941 9.75191 4.95838 9.56025C4.93012 9.60634 4.89634 9.64933 4.85748 9.68819L3.03438 11.5113C2.96992 11.5757 2.8934 11.6269 2.80918 11.6618C2.72496 11.6967 2.63469 11.7146 2.54353 11.7146C2.45237 11.7146 2.36211 11.6967 2.27789 11.6618C2.19367 11.6269 2.11714 11.5757 2.05268 11.5113C1.98822 11.4468 1.93709 11.3703 1.90221 11.2861C1.86732 11.2019 1.84937 11.1116 1.84937 11.0204C1.84937 10.9293 1.86732 10.839 1.90221 10.7548C1.93709 10.6706 1.98822 10.5941 2.05268 10.5296L3.49373 9.08855C2.6197 8.744 1.91247 8.33062 1.42559 7.87006C0.956591 7.42636 1.26799 6.63816 1.91359 6.63816C2.10629 6.63816 2.28789 6.71896 2.42489 6.85456C2.70009 7.12696 3.19529 7.45886 3.98459 7.77796C5.54429 8.40856 7.73699 8.77016 10.0001 8.77016C12.2632 8.77016 14.4558 8.40856 16.0156 7.77796C16.8049 7.45886 17.3001 7.12696 17.5753 6.85456Z" fill="currentColor"></path>
                         </svg>
                     </span>
                 </div>
@@ -1674,6 +1761,17 @@
                 const messageLimit = 50;
                 const hasMoreMessages = computed(() => messages.value.length < totalMessages.value);
                 const channelsList = ref([]);
+
+                // ── 认证状态 ──
+                const authLoading = ref(true);
+                const authEnabled = ref(false);
+                const authenticated = ref(false);
+                const requiresSetup = ref(false);
+                const authSubmitting = ref(false);
+                const authPassword = ref('');
+                const authPasswordConfirm = ref('');
+                const authError = ref('');
+                const authMessage = ref('');
 
                 // ── UI 状态 ──
                 const modemsLoading = ref(true);
@@ -1700,6 +1798,9 @@
                 const settingsLoading = ref(false);
                 const settingsSaving = ref(false);
                 const settingsError = ref(null);
+                const passwordForm = ref({ current_password: '', new_password: '', confirm_password: '' });
+                const passwordChanging = ref(false);
+                const passwordChangeError = ref('');
 
                 // ── USSD（按 IMEI 独立管理每台设备的状态）──
                 const ussdStates = ref({});
@@ -1728,6 +1829,19 @@
                 let refreshTimer = null;
                 let ws = null;
                 let reconnectTimer = null;
+
+                const closeWebSocket = () => {
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
+                    if (ws) {
+                        ws.onclose = null;
+                        ws.close();
+                        ws = null;
+                    }
+                    wsConnected.value = false;
+                };
 
                 // ── 工具函数 ──
                 const toStr = (arr) => Array.isArray(arr) ? arr.join(', ') : '';
@@ -1902,11 +2016,183 @@
                     if (!channelsLoading.value) loadChannels();
                 };
 
+                const handleAuthFailure = async (res) => {
+                    if (res.status !== 401 && res.status !== 428 && res.status !== 429) return false;
+                    try {
+                        const data = await res.json();
+                        authEnabled.value = !!data.auth_enabled;
+                        requiresSetup.value = !!data.requires_setup;
+                        authenticated.value = !!data.authenticated;
+                        authMessage.value = data.message || '';
+                    } catch (_) {
+                        authenticated.value = false;
+                        authMessage.value = '';
+                    }
+                    closeWebSocket();
+                    return true;
+                };
+
+                const apiFetch = async (url, options = {}) => {
+                    const res = await fetch(url, options);
+                    if (await handleAuthFailure(res)) {
+                        throw new Error(authMessage.value || (requiresSetup.value ? '请先设置管理密码' : '登录已失效，请重新登录'));
+                    }
+                    return res;
+                };
+
+                const validateManagementPassword = (value, label = '密码') => {
+                    const trimmed = (value || '').trim();
+                    if (trimmed.length < 6) {
+                        throw new Error(`${label}至少需要 6 位`);
+                    }
+                    if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
+                        throw new Error(`${label}仅允许字母和数字`);
+                    }
+                    return trimmed;
+                };
+
+                const checkAuthStatus = async () => {
+                    try {
+                        authLoading.value = true;
+                        authError.value = '';
+                        const res = await fetch('/api/auth/status');
+                        if (!res.ok) throw new Error('状态检查失败');
+                        const data = await res.json();
+                        authEnabled.value = !!data.auth_enabled;
+                        requiresSetup.value = !!data.requires_setup;
+                        authenticated.value = !!data.authenticated || !data.auth_enabled;
+                        authMessage.value = data.message || '';
+                    } catch (e) {
+                        authError.value = '无法获取登录状态: ' + e.message;
+                        authenticated.value = false;
+                    } finally {
+                        authLoading.value = false;
+                    }
+                };
+
+                const initializeApp = async () => {
+                    await Promise.all([loadModems(), loadMessages(), loadSettings()]);
+                    connectWebSocket();
+                };
+
+                const login = async () => {
+                    try {
+                        authSubmitting.value = true;
+                        authError.value = '';
+                        const password = validateManagementPassword(authPassword.value);
+                        const res = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ password })
+                        });
+                        if (!res.ok) {
+                            if (await handleAuthFailure(res)) {
+                                throw new Error(authMessage.value || '登录失败');
+                            }
+                            const text = await res.text();
+                            throw new Error(text || '登录失败');
+                        }
+                        authenticated.value = true;
+                        authMessage.value = '';
+                        authPassword.value = '';
+                        await initializeApp();
+                    } catch (e) {
+                        authError.value = e.message;
+                    } finally {
+                        authSubmitting.value = false;
+                    }
+                };
+
+                const setupPassword = async () => {
+                    try {
+                        authSubmitting.value = true;
+                        authError.value = '';
+                        const password = validateManagementPassword(authPassword.value);
+                        const confirmPassword = validateManagementPassword(authPasswordConfirm.value, '确认密码');
+                        if (password !== confirmPassword) {
+                            throw new Error('两次输入的密码不一致');
+                        }
+                        const res = await fetch('/api/auth/setup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ password })
+                        });
+                        if (!res.ok) {
+                            if (await handleAuthFailure(res)) {
+                                throw new Error(authMessage.value || '设置失败');
+                            }
+                            const text = await res.text();
+                            throw new Error(text || '设置失败');
+                        }
+                        requiresSetup.value = false;
+                        authenticated.value = true;
+                        authMessage.value = '';
+                        authPassword.value = '';
+                        authPasswordConfirm.value = '';
+                        await initializeApp();
+                    } catch (e) {
+                        authError.value = e.message;
+                    } finally {
+                        authSubmitting.value = false;
+                    }
+                };
+
+                const logout = async () => {
+                    try {
+                        await fetch('/api/auth/logout', { method: 'POST' });
+                    } finally {
+                        authenticated.value = false;
+                        authMessage.value = '你已退出登录，请重新登录后继续操作';
+                        authPassword.value = '';
+                        authPasswordConfirm.value = '';
+                        closeWebSocket();
+                    }
+                };
+
+                const resetPasswordForm = () => {
+                    passwordForm.value = { current_password: '', new_password: '', confirm_password: '' };
+                    passwordChangeError.value = '';
+                };
+
+                const changePassword = async () => {
+                    try {
+                        passwordChanging.value = true;
+                        passwordChangeError.value = '';
+                        const currentPassword = (passwordForm.value.current_password || '').trim();
+                        if (!currentPassword) {
+                            throw new Error('请输入当前密码');
+                        }
+                        const newPassword = validateManagementPassword(passwordForm.value.new_password, '新密码');
+                        const confirmPassword = validateManagementPassword(passwordForm.value.confirm_password, '确认新密码');
+                        if (newPassword !== confirmPassword) {
+                            throw new Error('两次输入的新密码不一致');
+                        }
+                        const res = await apiFetch('/api/auth/change-password', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                current_password: currentPassword,
+                                new_password: newPassword
+                            })
+                        });
+                        if (!res.ok) {
+                            const text = await res.text();
+                            throw new Error(text || '修改密码失败');
+                        }
+                        resetPasswordForm();
+                        showToast('密码已更新，其他设备需要重新登录', 'success', 5000);
+                    } catch (e) {
+                        passwordChangeError.value = e.message;
+                    } finally {
+                        passwordChanging.value = false;
+                    }
+                };
+
                 // ── API 请求 ──
                 const loadModems = async () => {
                     try {
                         modemsError.value = null;
-                        const res = await fetch('/api/modems');
+                        const res = await apiFetch('/api/modems');
                         if (!res.ok) throw new Error('加载失败');
                         modems.value = await res.json();
                         updateLastUpdateTime();
@@ -1927,7 +2213,7 @@
                             messagesError.value = null;
                         }
                         const offset = append ? messageOffset.value : 0;
-                        const res = await fetch(`/api/messages?limit=${messageLimit}&offset=${offset}`);
+                        const res = await apiFetch(`/api/messages?limit=${messageLimit}&offset=${offset}`);
                         if (!res.ok) throw new Error('加载失败');
                         const data = await res.json();
 
@@ -1969,7 +2255,7 @@
                     try {
                         channelsLoading.value = true;
                         channelsError.value = null;
-                        const res = await fetch('/api/channels');
+                        const res = await apiFetch('/api/channels');
                         if (!res.ok) throw new Error('加载失败');
                         const data = await res.json();
 
@@ -1997,7 +2283,7 @@
                     try {
                         settingsLoading.value = true;
                         settingsError.value = null;
-                        const res = await fetch('/api/settings');
+                        const res = await apiFetch('/api/settings');
                         if (!res.ok) throw new Error('加载失败');
                         const data = await res.json();
                         settings.value.device_name = data.device_name || '';
@@ -2013,7 +2299,7 @@
                 const saveSettings = async () => {
                     try {
                         settingsSaving.value = true;
-                        const res = await fetch('/api/settings/save', {
+                        const res = await apiFetch('/api/settings/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(settings.value)
@@ -2033,7 +2319,7 @@
                 const saveChannels = async () => {
                     try {
                         channelsSaving.value = true;
-                        const res = await fetch('/api/channels/save', {
+                        const res = await apiFetch('/api/channels/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(cleanChannelsForSave())
@@ -2058,7 +2344,7 @@
                     }
                     try {
                         testingChannels.value = true;
-                        const res = await fetch('/api/channels/test', {
+                        const res = await apiFetch('/api/channels/test', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(enabled)
@@ -2092,7 +2378,7 @@
                     try {
                         state.loading = true;
                         state.result = '';
-                        const res = await fetch('/api/ussd', {
+                        const res = await apiFetch('/api/ussd', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ imei: modem.imei, code: state.code })
@@ -2127,7 +2413,7 @@
                 const deleteMessage = async () => {
                     if (!messageToDelete.value) return;
                     try {
-                        const res = await fetch('/api/messages/delete', {
+                        const res = await apiFetch('/api/messages/delete', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id: messageToDelete.value.id })
@@ -2147,6 +2433,7 @@
 
                 // ── WebSocket ──
                 const connectWebSocket = () => {
+                    if (authEnabled.value && !authenticated.value) return;
                     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                     const wsUrl = `${protocol}//${window.location.host}/ws`;
                     ws = new WebSocket(wsUrl);
@@ -2176,37 +2463,36 @@
 
                     ws.onclose = () => {
                         wsConnected.value = false;
+                        if (authEnabled.value && !authenticated.value) return;
                         console.log('WebSocket 已断开，5秒后重连...');
                         reconnectTimer = setTimeout(connectWebSocket, 5000);
                     };
                 };
 
                 // ── 生命周期 ──
-                onMounted(() => {
+                onMounted(async () => {
                     initTheme();
                     watchSystemTheme();
-                    loadModems();
-                    loadMessages();
-                    loadSettings();
-                    connectWebSocket();
+                    await checkAuthStatus();
+                    if (authenticated.value) {
+                        await initializeApp();
+                    }
                     refreshTimer = setInterval(refresh, 30000);
                 });
 
                 onUnmounted(() => {
                     if (refreshTimer) clearInterval(refreshTimer);
-                    if (reconnectTimer) clearTimeout(reconnectTimer);
-                    if (ws) {
-                        ws.onclose = null; // 防止 close 触发重连
-                        ws.close();
-                        ws = null;
-                    }
+                    closeWebSocket();
                 });
 
                 return {
                     modems, messages, channelsList, settings,
+                    authLoading, authEnabled, authenticated, requiresSetup,
+                    authSubmitting, authPassword, authPasswordConfirm, authError, authMessage,
                     modemsLoading, messagesLoading, loadingMore, hasMoreMessages,
                     channelsLoading, modemsError, messagesError, channelsError,
                     settingsLoading, settingsSaving, settingsError,
+                    passwordForm, passwordChanging, passwordChangeError,
                     lastUpdate, sidebarOpen, activeTab, theme, themeLabel,
                     searchQuery, filteredMessages,
                     showDeleteModal, messageToDelete,
@@ -2220,7 +2506,8 @@
                     toggleSidebar, closeSidebar, switchToChannels, toggleTheme,
                     confirmDelete, cancelDelete, deleteMessage,
                     saveChannels, testAllChannels, runUSSD, loadMoreMessages,
-                    loadSettings, saveSettings
+                    loadSettings, saveSettings,
+                    login, setupPassword, logout, changePassword
                 };
             }
         })
