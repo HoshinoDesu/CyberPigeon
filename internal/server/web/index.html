@@ -191,6 +191,8 @@
             cursor: pointer;
             transition: all 0.2s ease;
             border-radius: var(--radius-sm);
+            white-space: nowrap;
+            writing-mode: horizontal-tb;
         }
 
         .theme-toggle:hover, .modem-toggle:hover {
@@ -1133,10 +1135,36 @@
         @media (max-width: 768px) {
             .topbar {
                 padding: 12px 16px;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+
+            .topbar-left {
+                min-width: 0;
+                flex: 1 1 auto;
             }
 
             .logo {
                 font-size: 16px;
+                letter-spacing: 0.2px;
+                min-width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .topbar-right {
+                gap: 8px;
+                flex-shrink: 0;
+                margin-left: auto;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+
+            .theme-toggle, .modem-toggle {
+                padding: 8px 12px;
+                font-size: 12px;
+                min-width: fit-content;
             }
 
             .status-text {
@@ -1169,6 +1197,31 @@
             
             .toast {
                 max-width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .topbar {
+                padding: 10px 12px;
+            }
+
+            .logo {
+                font-size: 15px;
+            }
+
+            .logo::before {
+                width: 16px;
+                height: 16px;
+                border-radius: 5px;
+            }
+
+            .topbar-right {
+                width: 100%;
+            }
+
+            .theme-toggle, .modem-toggle {
+                flex: 1 1 calc(50% - 4px);
+                text-align: center;
             }
         }
 </style>
