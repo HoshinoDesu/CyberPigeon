@@ -175,6 +175,11 @@
             color: var(--text-tertiary);
             display: flex;
             align-items: center;
+            white-space: nowrap;
+        }
+
+        .status-text-mobile {
+            display: none;
         }
 
         button {
@@ -1142,6 +1147,7 @@
             .topbar-left {
                 min-width: 0;
                 flex: 1 1 auto;
+                gap: 10px;
             }
 
             .logo {
@@ -1167,8 +1173,23 @@
                 min-width: fit-content;
             }
 
-            .status-text {
+            .status-text-mobile {
+                display: flex;
+                min-width: 0;
+                max-width: 40vw;
+                font-size: 12px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .status-text-desktop {
                 display: none;
+            }
+
+            .status-dot {
+                width: 6px;
+                height: 6px;
+                margin-right: 6px;
             }
 
             .modem-sidebar {
@@ -1259,9 +1280,12 @@
             <div class="topbar">
                 <div class="topbar-left">
                     <div class="logo">CYBERPIGEON</div>
+                    <div class="status-text status-text-mobile" v-if="lastUpdate || !wsConnected">
+                        <span class="status-dot" :class="{ disconnected: !wsConnected }"></span>{{ wsConnected ? lastUpdate : '已断开，重连中...' }}
+                    </div>
                 </div>
                 <div class="topbar-right">
-                    <div class="status-text" v-if="lastUpdate || !wsConnected">
+                    <div class="status-text status-text-desktop" v-if="lastUpdate || !wsConnected">
                         <span class="status-dot" :class="{ disconnected: !wsConnected }"></span>{{ wsConnected ? lastUpdate : '已断开，重连中...' }}
                     </div>
                     <button class="theme-toggle" @click="toggleTheme">
