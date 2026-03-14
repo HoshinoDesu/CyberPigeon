@@ -26,9 +26,34 @@
 
 - 默认监听地址示例：`http://127.0.0.1:8080`
 - 当启用管理密码后，除认证状态接口外，其余 `/api/*` 都需要先登录。
-- 登录成功后，服务端通过 Cookie `cyberpigeon_session` 维持会话。
-- 下方示例统一使用 `curl` 的 `cookies.txt` 保存和复用会话。
 - `/ws` 也受登录态保护，未登录或未完成初始化时无法建立连接。
+- 下方示例统一使用 `curl` 的 `cookies.txt` 保存和复用会话。
+
+### 认证方式
+
+支持以下三种认证方式（按优先级排序）：
+
+| 方式 | 说明 | 适用场景 |
+| --- | --- | --- |
+| Cookie | 登录成功后自动签发 `cyberpigeon_session` Cookie | 浏览器 Web UI |
+| Bearer Token | 请求头 `Authorization: Bearer <session_token>` | 脚本、第三方客户端 |
+| Query 参数 | URL 参数 `?token=<session_token>` | WebSocket 等无法设置 Header 的场景 |
+
+`session_token` 即登录成功后 Cookie 中 `cyberpigeon_session` 的值。
+
+**Bearer Token 示例：**
+
+```bash
+# 先登录获取 session token
+curl -X POST http://127.0.0.1:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{"password":"abc123"}'
+
+# 从 cookies.txt 提取 token 后，通过 Bearer 方式调用 API
+curl http://127.0.0.1:8080/api/modems \
+  -H "Authorization: Bearer <session_token>"
+```
 
 ## 1. 查询认证状态
 
@@ -252,13 +277,52 @@ curl -X POST http://127.0.0.1:8080/api/channels/test \
 }
 ```
 
+## 15. WebSocket 实时推送
+
+WebSocket 连接建立后，服务端会在收到新短信时推送消息。
+
+**浏览器连接（自动携带 Cookie）：**
+
+```javascript
+const ws = new WebSocket('ws://127.0.0.1:8080/ws');
+```
+
+**使用 Token 参数连接（非浏览器客户端）：**
+
+```bash
+# wscat 示例
+wscat -c "ws://127.0.0.1:8080/ws?token=<session_token>"
+```
+
+**使用 Bearer Header 连接（支持自定义 Header 的客户端）：**
+
+```bash
+wscat -c "ws://127.0.0.1:8080/ws" -H "Authorization: Bearer <session_token>"
+```
+
+推送消息格式：
+
+```json
+{
+  "type": "new_message",
+  "message": {
+    "id": "msg_example_002",
+    "modem": "IMEI_EXAMPLE_001",
+    "number": "+8613900000000",
+    "text": "短信内容",
+    "timestamp": "2026-03-15T01:00:00+08:00",
+    "saved": "2026-03-15T01:00:01+08:00"
+  }
+}
+```
+
 ## 常见错误
 
 ```text
 401 Unauthorized
 ```
 
-表示未登录、登录已失效，或未携带有效 Cookie。
+表示未登录、登录已失效，或未携带有效的 Cookie / Bearer Token / Query Token。
 
 ```text
 428 Precondition Required

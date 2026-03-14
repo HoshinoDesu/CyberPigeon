@@ -194,8 +194,7 @@ func (s *Server) handleModems(w http.ResponseWriter, r *http.Request) {
 		infos = append(infos, info)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(infos)
+	writeJSON(w, infos)
 }
 
 // handleMessages 处理短信列表请求
@@ -205,10 +204,8 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
 	if s.storage == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSON(w, map[string]interface{}{
 			"items": []storage.Message{},
 			"total": 0,
 		})
@@ -249,7 +246,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 
 	messages, total := s.storage.ListWithPagination(limit, offset)
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"items": messages,
 		"total": total,
 	})
@@ -261,7 +258,7 @@ func (s *Server) handleUSSD(w http.ResponseWriter, r *http.Request) {
 	sendError := func(w http.ResponseWriter, msg string, code int) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": msg,
 		})
 	}
@@ -317,8 +314,7 @@ func (s *Server) handleUSSD(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, map[string]string{
 		"reply": reply,
 	})
 }
@@ -350,8 +346,7 @@ func (s *Server) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	writeJSON(w, map[string]bool{"success": true})
 }
 
 // handleChannels 处理获取通道配置请求
@@ -435,8 +430,7 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(channels)
+	writeJSON(w, channels)
 }
 
 // handleSaveChannels 处理保存通道配置请求
@@ -468,8 +462,7 @@ func (s *Server) handleSaveChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	writeJSON(w, map[string]bool{"success": true})
 }
 
 // handleTestChannel 处理测试通道请求
@@ -516,8 +509,7 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"success": true,
 		"message": "测试消息已发送",
 	})
@@ -656,13 +648,13 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.cfgMu.RLock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	data := map[string]any{
 		"device_name":          s.cfg.DeviceName,
 		"device_name_in_title": s.cfg.DeviceNameInTitle,
 		"device_name_in_body":  s.cfg.DeviceNameInBody,
-	})
+	}
 	s.cfgMu.RUnlock()
+	writeJSON(w, data)
 }
 
 // handleSaveSettings 处理保存系统设置请求
@@ -696,6 +688,5 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfgMu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	writeJSON(w, map[string]bool{"success": true})
 }

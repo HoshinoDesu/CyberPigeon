@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -341,14 +341,30 @@ func (s *Server) isAuthenticated(r *http.Request) (bool, error) {
 	if s.storage == nil {
 		return true, nil
 	}
-	cookie, err := r.Cookie(authCookieName)
-	if err != nil {
-		if errors.Is(err, http.ErrNoCookie) {
-			return false, nil
+
+	// 1. Cookie
+	if cookie, err := r.Cookie(authCookieName); err == nil {
+		if ok, err := s.storage.ValidateSession(cookie.Value); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
 		}
-		return false, err
 	}
-	return s.storage.ValidateSession(cookie.Value)
+
+	// 2. Authorization: Bearer <token>
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token != "" {
+			return s.storage.ValidateSession(token)
+		}
+	}
+
+	// 3. Query parameter ?token=<token>（适用于 WebSocket 等无法设置 Header 的场景）
+	if token := r.URL.Query().Get("token"); token != "" {
+		return s.storage.ValidateSession(token)
+	}
+
+	return false, nil
 }
 
 func (s *Server) issueSession(w http.ResponseWriter) error {
@@ -382,13 +398,17 @@ func clearSessionCookie(w http.ResponseWriter) {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("JSON 编码失败", "error", err)
+	}
 }
 
 func writeAuthState(w http.ResponseWriter, statusCode int, state authStatus) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(state)
+	if err := json.NewEncoder(w).Encode(state); err != nil {
+		slog.Error("JSON 编码失败", "error", err)
+	}
 }
 
 func authRateLimitKey(r *http.Request) string {
