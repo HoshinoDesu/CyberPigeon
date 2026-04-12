@@ -47,15 +47,16 @@ type Server struct {
 
 // New 创建服务器
 func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, configPath string) *Server {
+	serverCfg := cfg.Clone()
 	return &Server{
-		cfg:         cfg,
+		cfg:         serverCfg,
 		forwarder:   fwd,
 		storage:     store,
 		configPath:  configPath,
 		clients:     make(map[*wsClient]bool),
 		authLimiter: newAuthRateLimiter(5, 15*time.Minute),
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, cfg.Server.AllowedOrigins) },
+			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, serverCfg.Server.AllowedOrigins) },
 		},
 	}
 }
@@ -90,7 +91,11 @@ func isOriginAllowed(r *http.Request, allowedOrigins []string) bool {
 
 // Run 运行服务器
 func (s *Server) Run(ctx context.Context) error {
-	if !s.cfg.Server.Enabled {
+	s.cfgMu.RLock()
+	serverEnabled := s.cfg.Server.Enabled
+	listenAddr := s.cfg.Server.Listen
+	s.cfgMu.RUnlock()
+	if !serverEnabled {
 		<-ctx.Done()
 		return nil
 	}
@@ -122,11 +127,11 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.Handle("/", http.FileServer(http.FS(webFS)))
 
 	s.server = &http.Server{
-		Addr:    s.cfg.Server.Listen,
+		Addr:    listenAddr,
 		Handler: mux,
 	}
 
-	slog.Info("Web 服务器启动", "listen", s.cfg.Server.Listen)
+	slog.Info("Web 服务器启动", "listen", listenAddr)
 
 	// 启动服务器
 	errCh := make(chan error, 1)
@@ -447,14 +452,18 @@ func (s *Server) handleSaveChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 先热重载转发器中的通知器
+	// 先热重载转发器中的通知器，验证配置有效性。
 	if err := s.forwarder.ReloadChannels(channels); err != nil {
 		http.Error(w, "Failed to reload channels: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 保存到配置文件
+	// 重载成功后再持久化到配置文件，避免写入无效配置。
 	s.cfgMu.Lock()
+	s.cfg.Channels = make([]config.ChannelConfig, len(channels))
+	for i, ch := range channels {
+		s.cfg.Channels[i] = config.CloneChannelConfig(ch)
+	}
 	saveErr := s.cfg.Save(s.configPath)
 	s.cfgMu.Unlock()
 	if saveErr != nil {
@@ -687,6 +696,7 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cfgMu.Unlock()
+	s.forwarder.UpdateMessageTemplate(req.DeviceName, req.DeviceNameInTitle, req.DeviceNameInBody)
 
 	writeJSON(w, map[string]bool{"success": true})
 }

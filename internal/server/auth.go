@@ -199,8 +199,8 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.storage != nil {
-		if cookie, err := r.Cookie(authCookieName); err == nil {
-			_ = s.storage.DeleteSession(cookie.Value)
+		if token := sessionTokenFromRequest(r); token != "" {
+			_ = s.storage.DeleteSession(token)
 		}
 	}
 	clearSessionCookie(w)
@@ -341,30 +341,28 @@ func (s *Server) isAuthenticated(r *http.Request) (bool, error) {
 	if s.storage == nil {
 		return true, nil
 	}
-
-	// 1. Cookie
-	if cookie, err := r.Cookie(authCookieName); err == nil {
-		if ok, err := s.storage.ValidateSession(cookie.Value); err != nil {
-			return false, err
-		} else if ok {
-			return true, nil
-		}
-	}
-
-	// 2. Authorization: Bearer <token>
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if token != "" {
-			return s.storage.ValidateSession(token)
-		}
-	}
-
-	// 3. Query parameter ?token=<token>（适用于 WebSocket 等无法设置 Header 的场景）
-	if token := r.URL.Query().Get("token"); token != "" {
+	if token := sessionTokenFromRequest(r); token != "" {
 		return s.storage.ValidateSession(token)
 	}
 
 	return false, nil
+}
+
+func sessionTokenFromRequest(r *http.Request) string {
+	// 1. Cookie
+	if cookie, err := r.Cookie(authCookieName); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+
+	// 2. Authorization: Bearer <token>
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		if token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer ")); token != "" {
+			return token
+		}
+	}
+
+	// 3. Query parameter ?token=<token>（适用于 WebSocket 等无法设置 Header 的场景）
+	return strings.TrimSpace(r.URL.Query().Get("token"))
 }
 
 func (s *Server) issueSession(w http.ResponseWriter) error {

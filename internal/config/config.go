@@ -89,6 +89,41 @@ type ChannelConfig struct {
 	APIURL   string `toml:"api_url" json:"api_url"`     // Telegram API 地址 (可选，默认 https://api.telegram.org)
 }
 
+// Clone 返回配置的深拷贝，避免运行时在不同组件之间共享可变状态。
+func (c *Config) Clone() *Config {
+	if c == nil {
+		return nil
+	}
+
+	clone := *c
+	if c.Server.AllowedOrigins != nil {
+		clone.Server.AllowedOrigins = append([]string(nil), c.Server.AllowedOrigins...)
+	}
+	if c.Channels != nil {
+		clone.Channels = make([]ChannelConfig, len(c.Channels))
+		for i, ch := range c.Channels {
+			clone.Channels[i] = CloneChannelConfig(ch)
+		}
+	}
+
+	return &clone
+}
+
+// CloneChannelConfig 返回单个通道配置的深拷贝。
+func CloneChannelConfig(ch ChannelConfig) ChannelConfig {
+	clone := ch
+	if ch.To != nil {
+		clone.To = append([]string(nil), ch.To...)
+	}
+	if ch.Headers != nil {
+		clone.Headers = make(map[string]string, len(ch.Headers))
+		for k, v := range ch.Headers {
+			clone.Headers[k] = v
+		}
+	}
+	return clone
+}
+
 // Load 加载配置文件
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)

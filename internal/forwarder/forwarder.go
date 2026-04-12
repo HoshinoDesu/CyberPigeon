@@ -35,13 +35,14 @@ type Forwarder struct {
 
 // New 创建转发器
 func New(cfg *config.Config, manager *modem.Manager, store *storage.Storage) (*Forwarder, error) {
-	notif, err := notifier.New(cfg)
+	forwarderCfg := cfg.Clone()
+	notif, err := notifier.New(forwarderCfg)
 	if err != nil {
 		return nil, fmt.Errorf("创建通知器: %w", err)
 	}
 
 	return &Forwarder{
-		cfg:       cfg,
+		cfg:       forwarderCfg,
 		manager:   manager,
 		storage:   store,
 		notifier:  notif,
@@ -55,7 +56,11 @@ func New(cfg *config.Config, manager *modem.Manager, store *storage.Storage) (*F
 
 // Run 运行转发器
 func (f *Forwarder) Run(ctx context.Context) error {
-	if len(f.cfg.Channels) == 0 && (f.storage == nil || !f.cfg.Storage.Enabled) {
+	f.mu.Lock()
+	hasChannels := len(f.cfg.Channels) > 0
+	storageEnabled := f.cfg.Storage.Enabled
+	f.mu.Unlock()
+	if !hasChannels && (f.storage == nil || !storageEnabled) {
 		slog.Info("未配置任何通道或存储，转发器将不执行任何操作")
 		<-ctx.Done()
 		return nil
@@ -297,21 +302,41 @@ func (f *Forwarder) cleanupProcessed(ctx context.Context) {
 
 // ReloadChannels 重载通知通道配置
 func (f *Forwarder) ReloadChannels(channels []config.ChannelConfig) error {
-	nextCfg := *f.cfg
-	nextCfg.Channels = channels
+	nextCfg := f.cfg.Clone()
+	nextCfg.Channels = cloneChannels(channels)
 
-	nextNotifier, err := notifier.New(&nextCfg)
+	nextNotifier, err := notifier.New(nextCfg)
 	if err != nil {
 		return fmt.Errorf("重载通知通道失败: %w", err)
 	}
 
 	f.mu.Lock()
-	f.cfg.Channels = channels
+	f.cfg.Channels = cloneChannels(channels)
 	f.notifier = nextNotifier
 	f.mu.Unlock()
 
 	slog.Info("通知通道已重载", "count", len(channels))
 	return nil
+}
+
+// UpdateMessageTemplate 更新转发时使用的设备名展示配置。
+func (f *Forwarder) UpdateMessageTemplate(deviceName string, inTitle, inBody bool) {
+	f.mu.Lock()
+	f.cfg.DeviceName = deviceName
+	f.cfg.DeviceNameInTitle = inTitle
+	f.cfg.DeviceNameInBody = inBody
+	f.mu.Unlock()
+}
+
+func cloneChannels(channels []config.ChannelConfig) []config.ChannelConfig {
+	if channels == nil {
+		return nil
+	}
+	cloned := make([]config.ChannelConfig, len(channels))
+	for i, ch := range channels {
+		cloned[i] = config.CloneChannelConfig(ch)
+	}
+	return cloned
 }
 
 // formatMessage 格式化消息
@@ -323,12 +348,17 @@ func (f *Forwarder) formatMessage(m *modem.Modem, sms *modem.SMS) notifier.Messa
 	}
 
 	modemName := f.getModemName(m)
+	f.mu.Lock()
+	deviceName := f.cfg.DeviceName
+	showDeviceInTitle := f.cfg.DeviceNameInTitle
+	showDeviceInBody := f.cfg.DeviceNameInBody
+	f.mu.Unlock()
 
 	return notifier.Message{
 		Modem:             modemName,
-		DeviceName:        f.cfg.DeviceName,
-		ShowDeviceInTitle: f.cfg.DeviceNameInTitle,
-		ShowDeviceInBody:  f.cfg.DeviceNameInBody,
+		DeviceName:        deviceName,
+		ShowDeviceInTitle: showDeviceInTitle,
+		ShowDeviceInBody:  showDeviceInBody,
 		From:              sender,
 		To:                recipient,
 		Timestamp:         sms.Timestamp,
