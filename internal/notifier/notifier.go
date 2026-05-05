@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // Message 通知消息
@@ -92,9 +92,14 @@ type Notifier struct {
 	channels []Channel
 }
 
-// New 创建通知器
+// New 创建通知器。启用通道配置错误时返回错误，避免保存或测试时误判为成功。
 func New(cfg *config.Config) (*Notifier, error) {
+	if cfg == nil {
+		return &Notifier{}, nil
+	}
+
 	channels := make([]Channel, 0, len(cfg.Channels))
+	var createErrs []error
 
 	for _, chCfg := range cfg.Channels {
 		if !chCfg.Enabled {
@@ -103,11 +108,17 @@ func New(cfg *config.Config) (*Notifier, error) {
 		}
 		ch, err := createChannel(chCfg)
 		if err != nil {
+			wrappedErr := fmt.Errorf("%s 通道配置无效: %w", chCfg.Type, err)
 			slog.Error("创建通道失败", "type", chCfg.Type, "error", err)
+			createErrs = append(createErrs, wrappedErr)
 			continue
 		}
 		channels = append(channels, ch)
 		slog.Info("已加载通道", "type", chCfg.Type)
+	}
+
+	if len(createErrs) > 0 {
+		return nil, errors.Join(createErrs...)
 	}
 
 	return &Notifier{

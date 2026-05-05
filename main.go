@@ -13,11 +13,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/CyberPigeon/internal/config"
-	"github.com/CyberPigeon/internal/forwarder"
-	"github.com/CyberPigeon/internal/modem"
-	"github.com/CyberPigeon/internal/server"
-	"github.com/CyberPigeon/internal/storage"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/forwarder"
+	"github.com/HoshinoDesu/CyberPigeon/internal/modem"
+	"github.com/HoshinoDesu/CyberPigeon/internal/server"
+	"github.com/HoshinoDesu/CyberPigeon/internal/storage"
 	"golang.org/x/term"
 )
 

@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // GotifyChannel Gotify 通道

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // TelegramChannel Telegram Bot 通道

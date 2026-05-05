@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // WeComChannel 企业微信通道

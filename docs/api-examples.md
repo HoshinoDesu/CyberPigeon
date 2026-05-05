@@ -37,7 +37,7 @@
 | --- | --- | --- |
 | Cookie | 登录成功后自动签发 `cyberpigeon_session` Cookie | 浏览器 Web UI |
 | Bearer Token | 请求头 `Authorization: Bearer <session_token>` | 脚本、第三方客户端 |
-| Query 参数 | URL 参数 `?token=<session_token>` | WebSocket 等无法设置 Header 的场景 |
+| Query 参数 | URL 参数 `?token=<session_token>` | 仅用于 `/ws`，作为无法设置 Header 时的兜底方式；普通 API 不接受 query token |
 
 `session_token` 即登录成功后 Cookie 中 `cyberpigeon_session` 的值。
 
@@ -48,7 +48,7 @@
 curl -X POST http://127.0.0.1:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -c cookies.txt \
-  -d '{"password":"abc123"}'
+  -d '{"password":"MyStrong123!"}'
 
 # 从 cookies.txt 提取 token 后，通过 Bearer 方式调用 API
 curl http://127.0.0.1:8080/api/modems \
@@ -80,13 +80,13 @@ curl http://127.0.0.1:8080/api/auth/status
 curl -X POST http://127.0.0.1:8080/api/auth/setup \
   -H "Content-Type: application/json" \
   -c cookies.txt \
-  -d '{"password":"abc123"}'
+  -d '{"password":"MyStrong123!"}'
 ```
 
 说明：
 
-- 管理密码至少 6 位。
-- 仅允许字母和数字。
+- 管理密码至少 10 位。
+- 支持字母、数字、空格和符号，不能包含控制字符。
 - 设置成功后会自动签发登录会话 Cookie。
 
 ## 3. 登录
@@ -95,7 +95,7 @@ curl -X POST http://127.0.0.1:8080/api/auth/setup \
 curl -X POST http://127.0.0.1:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -c cookies.txt \
-  -d '{"password":"abc123"}'
+  -d '{"password":"MyStrong123!"}'
 ```
 
 成功返回：
@@ -120,7 +120,7 @@ curl -X POST http://127.0.0.1:8080/api/auth/change-password \
   -H "Content-Type: application/json" \
   -b cookies.txt \
   -c cookies.txt \
-  -d '{"current_password":"abc123","new_password":"abc456"}'
+  -d '{"current_password":"MyStrong123!","new_password":"MyNewStrong123!"}'
 ```
 
 说明：

@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // DingtalkChannel 钉钉机器人通道

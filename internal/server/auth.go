@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,15 +13,17 @@ import (
 const authCookieName = "cyberpigeon_session"
 
 type authRateLimiter struct {
-	mu       sync.Mutex
-	maxFails int
-	window   time.Duration
-	entries  map[string][]time.Time
+	mu        sync.Mutex
+	maxFails  int
+	maxKeys   int
+	window    time.Duration
+	entries   map[string][]time.Time
 }
 
 func newAuthRateLimiter(maxFails int, window time.Duration) *authRateLimiter {
 	return &authRateLimiter{
 		maxFails: maxFails,
+		maxKeys:  4096,
 		window:   window,
 		entries:  make(map[string][]time.Time),
 	}
@@ -44,6 +47,13 @@ func (l *authRateLimiter) RecordFailure(key string) {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if _, exists := l.entries[key]; !exists && len(l.entries) >= l.maxKeys {
+		l.pruneAllLocked(now)
+		if len(l.entries) >= l.maxKeys {
+			slog.Warn("登录限流记录已达上限，丢弃新的限流 key", "max_keys", l.maxKeys)
+			return
+		}
+	}
 	entries := l.pruneLocked(key, now)
 	entries = append(entries, now)
 	l.entries[key] = entries
@@ -73,6 +83,12 @@ func (l *authRateLimiter) pruneLocked(key string, now time.Time) []time.Time {
 	}
 	l.entries[key] = kept
 	return kept
+}
+
+func (l *authRateLimiter) pruneAllLocked(now time.Time) {
+	for key := range l.entries {
+		l.pruneLocked(key, now)
+	}
 }
 
 type authStatus struct {
@@ -125,7 +141,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.issueSession(w); err != nil {
+	if err := s.issueSession(w, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -186,7 +202,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if s.authLimiter != nil {
 		s.authLimiter.Reset(clientKey)
 	}
-	if err := s.issueSession(w); err != nil {
+	if err := s.issueSession(w, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -203,7 +219,7 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 			_ = s.storage.DeleteSession(token)
 		}
 	}
-	clearSessionCookie(w)
+	clearSessionCookie(w, r)
 	writeJSON(w, map[string]bool{"success": true})
 }
 
@@ -273,7 +289,7 @@ func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.issueSession(w); err != nil {
+	if err := s.issueSession(w, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -361,11 +377,14 @@ func sessionTokenFromRequest(r *http.Request) string {
 		}
 	}
 
-	// 3. Query parameter ?token=<token>（适用于 WebSocket 等无法设置 Header 的场景）
-	return strings.TrimSpace(r.URL.Query().Get("token"))
+	// 3. Query parameter ?token=<token> 仅允许用于 WebSocket 场景，避免普通 API token 出现在日志或 Referer 中。
+	if r.URL.Path == "/ws" {
+		return strings.TrimSpace(r.URL.Query().Get("token"))
+	}
+	return ""
 }
 
-func (s *Server) issueSession(w http.ResponseWriter) error {
+func (s *Server) issueSession(w http.ResponseWriter, r *http.Request) error {
 	token, err := s.storage.CreateSession()
 	if err != nil {
 		return err
@@ -375,6 +394,7 @@ func (s *Server) issueSession(w http.ResponseWriter) error {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 		MaxAge:   7 * 24 * 3600,
@@ -382,16 +402,21 @@ func (s *Server) issueSession(w http.ResponseWriter) error {
 	return nil
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     authCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
+}
+
+func isSecureRequest(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -410,13 +435,9 @@ func writeAuthState(w http.ResponseWriter, statusCode int, state authStatus) {
 }
 
 func authRateLimitKey(r *http.Request) string {
-	forwardedFor := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0])
-	if forwardedFor != "" {
-		return forwardedFor
-	}
-	realIP := strings.TrimSpace(r.Header.Get("X-Real-IP"))
-	if realIP != "" {
-		return realIP
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
 	}
 	return r.RemoteAddr
 }

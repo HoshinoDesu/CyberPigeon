@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CyberPigeon/internal/modem"
+	"github.com/HoshinoDesu/CyberPigeon/internal/modem"
 	_ "modernc.org/sqlite"
 )
 
@@ -166,10 +166,11 @@ func (s *Storage) migrateFromJSON(dbPath string) {
 	}
 }
 
-// GenerateID 生成消息唯一 ID
+// GenerateID 生成消息唯一 ID。
+// 使用设备、时间、号码和正文等稳定字段，避免 DBus path 变化导致同一短信重启后重复入库/转发。
 func GenerateID(modemIMEI string, sms *modem.SMS) string {
-	data := fmt.Sprintf("%s|%s|%d|%s|%s", modemIMEI, sms.Path(), sms.Timestamp.UnixNano(), sms.Number, sms.Text)
-	hash := md5.Sum([]byte(data))
+	data := fmt.Sprintf("%s|%d|%s|%s", modemIMEI, sms.Timestamp.UnixNano(), sms.Number, sms.Text)
+	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
 

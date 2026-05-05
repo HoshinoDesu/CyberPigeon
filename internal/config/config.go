@@ -136,11 +136,9 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件: %w", err)
 	}
 
-	// 确保配置文件包含所有字段，自动补全缺失项并回写
+	// 补全运行时默认值，但不在加载时自动回写，避免丢失用户注释、未知字段或意外改动配置文件。
 	if cfg.ensureDefaults() {
-		if err := cfg.Save(path); err != nil {
-			slog.Warn("自动补全配置后回写失败", "error", err)
-		}
+		slog.Info("已应用运行时默认配置；如需持久化，请在 Web 管理界面保存设置", "path", path)
 	}
 
 	return &cfg, nil
@@ -257,10 +255,14 @@ func channelToMap(ch ChannelConfig) map[string]any {
 
 // Save 保存配置到文件（原子写入：先写临时文件，再重命名）
 func (c *Config) Save(path string) error {
-	// 读取原始文件权限，保存后保持一致
+	// 配置中包含推送 token/密码等敏感信息：默认使用 0600。
+	// 仅当原文件已经没有 group/other 权限时，保留其更严格的权限。
 	var perm os.FileMode = 0600
 	if info, err := os.Stat(path); err == nil {
-		perm = info.Mode().Perm()
+		existingPerm := info.Mode().Perm()
+		if existingPerm&0077 == 0 {
+			perm = existingPerm
+		}
 	}
 
 	// 在目标文件同目录创建临时文件，确保同一文件系统以支持原子 Rename

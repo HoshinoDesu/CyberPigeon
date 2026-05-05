@@ -13,10 +13,10 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
-	"github.com/CyberPigeon/internal/config"
-	"github.com/CyberPigeon/internal/modem"
-	"github.com/CyberPigeon/internal/notifier"
-	"github.com/CyberPigeon/internal/storage"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/modem"
+	"github.com/HoshinoDesu/CyberPigeon/internal/notifier"
+	"github.com/HoshinoDesu/CyberPigeon/internal/storage"
 )
 
 // Forwarder 短信转发器

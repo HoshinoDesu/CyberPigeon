@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 	serverchan_sdk "github.com/easychen/serverchan-sdk-golang"
 )
 

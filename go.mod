@@ -1,4 +1,4 @@
-module github.com/CyberPigeon
+module github.com/HoshinoDesu/CyberPigeon
 
 go 1.24.0
 

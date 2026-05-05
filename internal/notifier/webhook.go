@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // WebhookChannel Webhook 通道

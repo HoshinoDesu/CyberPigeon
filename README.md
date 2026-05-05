@@ -63,7 +63,7 @@ GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
 - 清空所有现有登录会话
 - 程序执行完成后立即退出
 
-程序默认监听端口可在配置文件中修改。
+程序默认监听端口可在配置文件中修改。若关闭存储功能，Web 管理认证不可用，程序会强制 Web 服务仅监听本机地址，避免管理接口暴露到局域网或公网。
 
 常用接口调用示例见 [docs/api-examples.md](docs/api-examples.md)。
 

@@ -8,7 +8,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 // EmailChannel Email 通道

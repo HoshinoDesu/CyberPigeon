@@ -19,12 +19,15 @@ const (
 
 func validateManagementPassword(password string) (string, error) {
 	password = strings.TrimSpace(password)
-	if len(password) < 6 {
-		return "", fmt.Errorf("密码长度不能少于 6 位")
+	if len(password) < 10 {
+		return "", fmt.Errorf("密码长度不能少于 10 位")
+	}
+	if len(password) > 256 {
+		return "", fmt.Errorf("密码长度不能超过 256 位")
 	}
 	for _, ch := range password {
-		if (ch < '0' || ch > '9') && (ch < 'A' || ch > 'Z') && (ch < 'a' || ch > 'z') {
-			return "", fmt.Errorf("密码仅允许字母和数字")
+		if ch < 32 || ch == 127 {
+			return "", fmt.Errorf("密码不能包含控制字符")
 		}
 	}
 	return password, nil

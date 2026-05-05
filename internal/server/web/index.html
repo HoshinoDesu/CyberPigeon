@@ -1262,12 +1262,12 @@
                 </div>
                 <div class="field-group" style="margin-bottom: 24px;">
                     <label class="field-label">密码</label>
-                    <password-input v-model="authPassword" placeholder="请输入密码" :alnum-only="true"></password-input>
-                    <div class="field-hint" style="margin-top: 8px;">至少 6 位，仅允许字母和数字。</div>
+                    <password-input v-model="authPassword" placeholder="请输入密码"></password-input>
+                    <div class="field-hint" style="margin-top: 8px;">至少 10 位，支持字母、数字、空格和符号。</div>
                 </div>
                 <div class="field-group" v-if="requiresSetup" style="margin-bottom: 24px;">
                     <label class="field-label">确认密码</label>
-                    <password-input v-model="authPasswordConfirm" placeholder="再次输入密码" :alnum-only="true"></password-input>
+                    <password-input v-model="authPasswordConfirm" placeholder="再次输入密码"></password-input>
                 </div>
                 <div v-if="authError" class="error-state" style="margin-bottom: 16px;">{{ authError }}</div>
                 <button class="save-channels-btn" @click="requiresSetup ? setupPassword() : login()" :disabled="authSubmitting">
@@ -1420,18 +1420,18 @@
                             <div class="channel-fields">
                                 <div class="field-group">
                                     <label class="field-label">当前密码</label>
-                                    <password-input v-model="passwordForm.current_password" placeholder="输入当前密码" :alnum-only="true"></password-input>
+                                    <password-input v-model="passwordForm.current_password" placeholder="输入当前密码"></password-input>
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">新密码</label>
-                                    <password-input v-model="passwordForm.new_password" placeholder="至少 6 位" :alnum-only="true"></password-input>
+                                    <password-input v-model="passwordForm.new_password" placeholder="至少 10 位"></password-input>
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">确认新密码</label>
-                                    <password-input v-model="passwordForm.confirm_password" placeholder="再次输入新密码" :alnum-only="true"></password-input>
+                                    <password-input v-model="passwordForm.confirm_password" placeholder="再次输入新密码"></password-input>
                                 </div>
                                 <div class="field-hint">
-                                    管理密码至少 6 位，仅允许字母和数字。
+                                    管理密码至少 10 位，支持字母、数字、空格和符号。
                                 </div>
                                 <div class="field-hint">
                                     修改密码后，其他浏览器中的会话将全部失效，当前页面会自动续签。
@@ -2119,11 +2119,14 @@
 
                 const validateManagementPassword = (value, label = '密码') => {
                     const trimmed = (value || '').trim();
-                    if (trimmed.length < 6) {
-                        throw new Error(`${label}至少需要 6 位`);
+                    if (trimmed.length < 10) {
+                        throw new Error(`${label}至少需要 10 位`);
                     }
-                    if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
-                        throw new Error(`${label}仅允许字母和数字`);
+                    if (trimmed.length > 256) {
+                        throw new Error(`${label}不能超过 256 位`);
+                    }
+                    if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+                        throw new Error(`${label}不能包含控制字符`);
                     }
                     return trimmed;
                 };

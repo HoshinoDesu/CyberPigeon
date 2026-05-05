@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 )
 
 const defaultRequestTimeout = 10 * time.Second

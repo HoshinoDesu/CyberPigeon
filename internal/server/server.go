@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CyberPigeon/internal/config"
-	"github.com/CyberPigeon/internal/forwarder"
-	"github.com/CyberPigeon/internal/modem"
-	"github.com/CyberPigeon/internal/notifier"
-	"github.com/CyberPigeon/internal/storage"
+	"github.com/HoshinoDesu/CyberPigeon/internal/config"
+	"github.com/HoshinoDesu/CyberPigeon/internal/forwarder"
+	"github.com/HoshinoDesu/CyberPigeon/internal/modem"
+	"github.com/HoshinoDesu/CyberPigeon/internal/notifier"
+	"github.com/HoshinoDesu/CyberPigeon/internal/storage"
 	"github.com/gorilla/websocket"
 )
 
@@ -48,6 +49,13 @@ type Server struct {
 // New 创建服务器
 func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, configPath string) *Server {
 	serverCfg := cfg.Clone()
+	if store == nil && serverCfg.Server.Enabled {
+		originalListen := serverCfg.Server.Listen
+		serverCfg.Server.Listen = localOnlyListenAddr(originalListen)
+		if serverCfg.Server.Listen != originalListen {
+			slog.Warn("存储未启用，Web 管理认证不可用，已强制仅监听本机地址", "from", originalListen, "listen", serverCfg.Server.Listen)
+		}
+	}
 	return &Server{
 		cfg:         serverCfg,
 		forwarder:   fwd,
@@ -59,6 +67,37 @@ func New(cfg *config.Config, fwd *forwarder.Forwarder, store *storage.Storage, c
 			CheckOrigin: func(r *http.Request) bool { return isOriginAllowed(r, serverCfg.Server.AllowedOrigins) },
 		},
 	}
+}
+
+func localOnlyListenAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "127.0.0.1:8080"
+	}
+	if _, err := strconv.Atoi(addr); err == nil {
+		return net.JoinHostPort("127.0.0.1", addr)
+	}
+
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		if strings.HasPrefix(addr, ":") {
+			return "127.0.0.1" + addr
+		}
+		return net.JoinHostPort("127.0.0.1", "8080")
+	}
+	if isLoopbackListenHost(host) {
+		return addr
+	}
+	return net.JoinHostPort("127.0.0.1", port)
+}
+
+func isLoopbackListenHost(host string) bool {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func isOriginAllowed(r *http.Request, allowedOrigins []string) bool {
@@ -127,8 +166,12 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.Handle("/", http.FileServer(http.FS(webFS)))
 
 	s.server = &http.Server{
-		Addr:    listenAddr,
-		Handler: mux,
+		Addr:              listenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	slog.Info("Web 服务器启动", "listen", listenAddr)
@@ -487,6 +530,10 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if !hasEnabledChannel(channels) {
+		http.Error(w, "至少需要启用一个推送通道", http.StatusBadRequest)
+		return
+	}
 
 	// 创建通知发送器（包含所有要测试的通道）
 	testCfg := &config.Config{
@@ -524,6 +571,15 @@ func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func hasEnabledChannel(channels []config.ChannelConfig) bool {
+	for _, ch := range channels {
+		if ch.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
 // handleWebSocket 处理 WebSocket 连接
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	authenticated, err := s.isAuthenticated(r)
@@ -556,6 +612,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		slog.Error("WebSocket 升级失败", "error", err)
 		return
 	}
+	_ = conn.SetWriteDeadline(time.Time{})
 
 	client := &wsClient{conn: conn}
 
@@ -637,6 +694,7 @@ func (s *Server) BroadcastMessage(msg storage.Message) {
 
 	for _, client := range clients {
 		client.writeMu.Lock()
+		_ = client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		err := client.conn.WriteMessage(websocket.TextMessage, data)
 		client.writeMu.Unlock()
 		if err != nil {
