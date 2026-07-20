@@ -9,7 +9,7 @@
 ## 功能特性
 
 - 支持多种转发通道：Email, Bark, Gotify, ServerChan3, 企业微信，钉钉，飞书，Telegram,Webhook。
-- 提供 Web 管理界面，支持查看短信列表和设备状态。
+- 提供 Web 管理界面（Next.js 静态导出，由 Go 二进制内嵌托管），支持查看短信列表和设备状态。
 - 支持 USSD 代码执行（如查询话费）。
 - 适配 Linux x64 和 Linux ARM64 平台。
 
@@ -20,11 +20,31 @@
 
 ## 编译方法
 
-使用 Go 语言进行编译：
+### 后端（Go）
 
 ```bash
 # 编译 Linux ARM64 版本
 GOOS=linux GOARCH=arm64 go build -o CyberPigeon-linux-arm64
+```
+
+### 前端（Next.js）
+
+Web 控制台源码在 `web/`，构建后同步到 `internal/server/web/` 供 Go `embed` 打包：
+
+```bash
+cd web
+npm install
+npm run export:go
+cd ..
+go build -o CyberPigeon
+```
+
+开发时可用：
+
+```bash
+cd web
+npm run dev
+# 另开终端启动后端，或通过 next.config 代理 /api 与 /ws
 ```
 
 ## 配置说明

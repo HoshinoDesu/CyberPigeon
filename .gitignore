@@ -2,6 +2,8 @@
 sms-forwarder
 sms-forwarder-linux-amd64
 sms-forwarder-linux-arm64
+CyberPigeon
+CyberPigeon-linux-*
 *.exe
 dist/
 dist-min/
@@ -32,3 +34,14 @@ build/
 
 # Local Copilot customization
 .github/
+
+# Frontend (Next.js source tooling)
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/tsconfig.tsbuildinfo
+web/next-env.d.ts
+
+# Local agent/tooling caches (skills content lives under .agents/)
+.claude/

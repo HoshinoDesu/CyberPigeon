@@ -23,7 +23,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//go:embed web/*
+//go:embed all:web
 var webFiles embed.FS
 
 // wsClient 封装 WebSocket 连接及其独立写锁

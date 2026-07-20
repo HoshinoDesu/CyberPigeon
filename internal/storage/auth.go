@@ -19,8 +19,8 @@ const (
 
 func validateManagementPassword(password string) (string, error) {
 	password = strings.TrimSpace(password)
-	if len(password) < 10 {
-		return "", fmt.Errorf("密码长度不能少于 10 位")
+	if len(password) < 6 {
+		return "", fmt.Errorf("密码长度不能少于 6 位")
 	}
 	if len(password) > 256 {
 		return "", fmt.Errorf("密码长度不能超过 256 位")
