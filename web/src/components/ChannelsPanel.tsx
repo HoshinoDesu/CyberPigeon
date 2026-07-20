@@ -604,14 +604,16 @@ export function ChannelsPanel({
         </button>
       </div>
 
-      <button
-        type="button"
-        className="btn btn-primary sticky bottom-3 w-full py-3 shadow-[var(--shadow-float)]"
-        disabled={saving}
-        onClick={onSave}
-      >
-        {saving ? "保存中…" : "保存配置"}
-      </button>
+      <div className="sticky-action">
+        <button
+          type="button"
+          className="btn btn-primary py-3"
+          disabled={saving}
+          onClick={onSave}
+        >
+          {saving ? "保存中…" : "保存配置"}
+        </button>
+      </div>
     </div>
   );
 }
