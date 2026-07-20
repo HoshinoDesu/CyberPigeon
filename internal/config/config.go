@@ -12,12 +12,21 @@ import (
 
 // Config 主配置结构
 type Config struct {
-	DeviceName        string          `toml:"device_name"`          // 当前设备名，用于展示在短信模板中
+	// DeviceName 为旧版全局设备名（兼容保留）。多模块场景请优先使用 [[modems]] 按 IMEI 配置。
+	DeviceName        string          `toml:"device_name"`
 	DeviceNameInTitle bool            `toml:"device_name_in_title"` // 设备名是否出现在推送标题中
 	DeviceNameInBody  bool            `toml:"device_name_in_body"`  // 设备名是否出现在推送正文中
+	AlwaysOnModems    bool            `toml:"always_on_modems"`    // 发现 disabled 模块时自动 Enable
+	Modems            []ModemConfig   `toml:"modems"`              // 按模块（IMEI）的独立设置
 	Storage           StorageConfig   `toml:"storage"`
 	Server            ServerConfig    `toml:"server"`
 	Channels          []ChannelConfig `toml:"channels"`
+}
+
+// ModemConfig 单个调制解调器的持久化设置
+type ModemConfig struct {
+	IMEI string `toml:"imei" json:"imei"`
+	Name string `toml:"name" json:"name"` // 推送模板中的模块显示名
 }
 
 // StorageConfig 存储配置
@@ -99,6 +108,9 @@ func (c *Config) Clone() *Config {
 	if c.Server.AllowedOrigins != nil {
 		clone.Server.AllowedOrigins = append([]string(nil), c.Server.AllowedOrigins...)
 	}
+	if c.Modems != nil {
+		clone.Modems = append([]ModemConfig(nil), c.Modems...)
+	}
 	if c.Channels != nil {
 		clone.Channels = make([]ChannelConfig, len(c.Channels))
 		for i, ch := range c.Channels {
@@ -107,6 +119,58 @@ func (c *Config) Clone() *Config {
 	}
 
 	return &clone
+}
+
+// ModemDisplayName 按 IMEI 查找模块显示名；未配置时回退到旧版全局 device_name。
+func (c *Config) ModemDisplayName(imei string) string {
+	if c == nil {
+		return ""
+	}
+	imei = strings.TrimSpace(imei)
+	if imei != "" {
+		for _, m := range c.Modems {
+			if strings.TrimSpace(m.IMEI) == imei {
+				if name := strings.TrimSpace(m.Name); name != "" {
+					return name
+				}
+				break
+			}
+		}
+	}
+	return strings.TrimSpace(c.DeviceName)
+}
+
+// UpsertModemName 写入或更新指定 IMEI 的模块显示名；name 为空时删除该条目。
+func (c *Config) UpsertModemName(imei, name string) {
+	if c == nil {
+		return
+	}
+	imei = strings.TrimSpace(imei)
+	name = strings.TrimSpace(name)
+	if imei == "" {
+		return
+	}
+
+	next := make([]ModemConfig, 0, len(c.Modems)+1)
+	found := false
+	for _, m := range c.Modems {
+		mIMEI := strings.TrimSpace(m.IMEI)
+		if mIMEI == "" {
+			continue
+		}
+		if mIMEI == imei {
+			found = true
+			if name != "" {
+				next = append(next, ModemConfig{IMEI: imei, Name: name})
+			}
+			continue
+		}
+		next = append(next, ModemConfig{IMEI: mIMEI, Name: strings.TrimSpace(m.Name)})
+	}
+	if !found && name != "" {
+		next = append(next, ModemConfig{IMEI: imei, Name: name})
+	}
+	c.Modems = next
 }
 
 // CloneChannelConfig 返回单个通道配置的深拷贝。
@@ -275,16 +339,20 @@ func (c *Config) Save(path string) error {
 
 	// 构建用于保存的配置，过滤掉每个通道不相关的字段
 	saveConfig := struct {
-		DeviceName        string        `toml:"device_name"`
-		DeviceNameInTitle bool          `toml:"device_name_in_title"`
-		DeviceNameInBody  bool          `toml:"device_name_in_body"`
-		Storage           StorageConfig `toml:"storage"`
-		Server            ServerConfig  `toml:"server"`
-		Channels          []any         `toml:"channels"`
+		DeviceName        string         `toml:"device_name,omitempty"`
+		DeviceNameInTitle bool           `toml:"device_name_in_title"`
+		DeviceNameInBody  bool           `toml:"device_name_in_body"`
+		AlwaysOnModems    bool           `toml:"always_on_modems"`
+		Modems            []ModemConfig  `toml:"modems,omitempty"`
+		Storage           StorageConfig  `toml:"storage"`
+		Server            ServerConfig   `toml:"server"`
+		Channels          []any          `toml:"channels"`
 	}{
 		DeviceName:        c.DeviceName,
 		DeviceNameInTitle: c.DeviceNameInTitle,
 		DeviceNameInBody:  c.DeviceNameInBody,
+		AlwaysOnModems:    c.AlwaysOnModems,
+		Modems:            append([]ModemConfig(nil), c.Modems...),
 		Storage:           c.Storage,
 		Server:            c.Server,
 		Channels:          make([]any, 0, len(c.Channels)),

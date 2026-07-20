@@ -104,6 +104,8 @@ export function App() {
     device_name: "",
     device_name_in_title: false,
     device_name_in_body: false,
+    always_on_modems: false,
+    modems: [],
   });
 
   const [modemsLoading, setModemsLoading] = useState(true);
@@ -265,6 +267,8 @@ export function App() {
         device_name: data.device_name || "",
         device_name_in_title: !!data.device_name_in_title,
         device_name_in_body: !!data.device_name_in_body,
+        always_on_modems: !!data.always_on_modems,
+        modems: Array.isArray(data.modems) ? data.modems : [],
       });
     } catch (e) {
       if (handleAuthFailure(e)) return;
@@ -399,6 +403,14 @@ export function App() {
   }, [messages, searchQuery]);
 
   const hasMoreMessages = messages.length < totalMessages;
+
+  const modemNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of settings.modems) {
+      if (m.imei && m.name) map[m.imei] = m.name;
+    }
+    return map;
+  }, [settings.modems]);
 
   const toggleTheme = () => {
     const themes: ThemeMode[] = ["dark", "light", "auto"];
@@ -800,6 +812,7 @@ export function App() {
               hasMore={hasMoreMessages}
               loadingMore={loadingMore}
               total={totalMessages}
+              modemNames={modemNames}
               onLoadMore={() => {
                 if (!hasMoreMessages || loadingMore) return;
                 void loadMessages(true);

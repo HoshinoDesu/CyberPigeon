@@ -25,6 +25,19 @@ function StateBox({ children }: { children: React.ReactNode }) {
   );
 }
 
+function getModemDisplayName(settings: Settings, imei: string): string {
+  const entry = settings.modems.find((m) => m.imei === imei);
+  return entry?.name || "";
+}
+
+function setModemDisplayName(settings: Settings, imei: string, name: string): Settings {
+  const existing = settings.modems.filter((m) => m.imei !== imei);
+  const next = name.trim()
+    ? [...existing, { imei, name }]
+    : existing;
+  return { ...settings, modems: next };
+}
+
 export function DevicesPanel({
   modems,
   loading,
@@ -74,6 +87,61 @@ export function DevicesPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Always On 全局开关 */}
+      <section className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)] p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="subhead">Always On</div>
+            <p className="caption mt-0.5">自动启用处于 Disabled 状态的模块</p>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={settings.always_on_modems}
+              onChange={(e) =>
+                onSettingsChange({ ...settings, always_on_modems: e.target.checked })
+              }
+            />
+            <span className="switch-track">
+              <span className="switch-thumb" />
+            </span>
+          </label>
+        </div>
+      </section>
+
+      {/* 设备名显示选项 */}
+      <section className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)] p-4">
+        <div className="subhead mb-3">推送模板</div>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-[0.875rem] text-[var(--label-secondary)]">
+            <input
+              type="checkbox"
+              checked={settings.device_name_in_title}
+              onChange={(e) =>
+                onSettingsChange({
+                  ...settings,
+                  device_name_in_title: e.target.checked,
+                })
+              }
+            />
+            设备名显示在推送标题
+          </label>
+          <label className="flex items-center gap-2 text-[0.875rem] text-[var(--label-secondary)]">
+            <input
+              type="checkbox"
+              checked={settings.device_name_in_body}
+              onChange={(e) =>
+                onSettingsChange({
+                  ...settings,
+                  device_name_in_body: e.target.checked,
+                })
+              }
+            />
+            设备名显示在推送正文
+          </label>
+        </div>
+      </section>
+
       {modems.map((modem) => {
         const ussd = ussdStates[modem.imei] || {
           code: "",
@@ -81,6 +149,7 @@ export function DevicesPanel({
           loading: false,
           error: "",
         };
+        const displayName = getModemDisplayName(settings, modem.imei);
         return (
           <section
             key={modem.imei}
@@ -93,12 +162,17 @@ export function DevicesPanel({
                 </h3>
                 <p className="caption mono mt-1">{modem.manufacturer || "—"}</p>
               </div>
-              <span
-                className="mono text-[0.8125rem] font-semibold tabular-nums"
-                style={{ color: getSignalColor(modem.signal_quality) }}
-              >
-                {modem.signal_quality}%
-              </span>
+              <div className="flex flex-col items-end gap-1">
+                <span
+                  className="mono text-[0.8125rem] font-semibold tabular-nums"
+                  style={{ color: getSignalColor(modem.signal_quality) }}
+                >
+                  {modem.signal_quality}%
+                </span>
+                {modem.state && modem.state !== "registered" && modem.state !== "connected" && (
+                  <span className="caption mono">{modem.state}</span>
+                )}
+              </div>
             </div>
 
             <div className="mb-4">
@@ -129,6 +203,19 @@ export function DevicesPanel({
                   </span>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-4 rounded-[var(--radius-md)] bg-[var(--bg-elevated)] p-3">
+              <div className="subhead mb-2">模块名称</div>
+              <input
+                className="field"
+                value={displayName}
+                placeholder={modem.model || "未命名"}
+                onChange={(e) =>
+                  onSettingsChange(setModemDisplayName(settings, modem.imei, e.target.value))
+                }
+              />
+              <p className="caption mt-1.5">推送消息中显示的模块名称，为空时使用全局设备名</p>
             </div>
 
             <div className="mb-4 rounded-[var(--radius-md)] bg-[var(--bg-elevated)] p-3">
@@ -166,59 +253,20 @@ export function DevicesPanel({
                 </pre>
               )}
             </div>
-
-            <div className="rounded-[var(--radius-md)] bg-[var(--bg-elevated)] p-3">
-              <div className="subhead mb-2">本机设备名</div>
-              <div className="flex gap-2">
-                <input
-                  className="field"
-                  value={settings.device_name}
-                  placeholder="例如：客厅网关"
-                  onChange={(e) =>
-                    onSettingsChange({ ...settings, device_name: e.target.value })
-                  }
-                />
-                <button
-                  type="button"
-                  className="btn btn-primary shrink-0"
-                  disabled={settingsSaving}
-                  onClick={onSaveSettings}
-                >
-                  {settingsSaving ? "…" : "保存"}
-                </button>
-              </div>
-              <div className="mt-3 flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-[0.875rem] text-[var(--label-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={settings.device_name_in_title}
-                    onChange={(e) =>
-                      onSettingsChange({
-                        ...settings,
-                        device_name_in_title: e.target.checked,
-                      })
-                    }
-                  />
-                  显示在推送标题
-                </label>
-                <label className="flex items-center gap-2 text-[0.875rem] text-[var(--label-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={settings.device_name_in_body}
-                    onChange={(e) =>
-                      onSettingsChange({
-                        ...settings,
-                        device_name_in_body: e.target.checked,
-                      })
-                    }
-                  />
-                  显示在推送正文
-                </label>
-              </div>
-            </div>
           </section>
         );
       })}
+
+      <div className="sticky-action">
+        <button
+          type="button"
+          className="btn btn-primary w-full"
+          disabled={settingsSaving}
+          onClick={onSaveSettings}
+        >
+          {settingsSaving ? "保存中…" : "保存设置"}
+        </button>
+      </div>
     </div>
   );
 }

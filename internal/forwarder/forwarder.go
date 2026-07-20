@@ -133,11 +133,18 @@ func (f *Forwarder) addModem(ctx context.Context, path dbus.ObjectPath, m *modem
 		f.modems[path] = m.EquipmentIdentifier
 	}
 	f.modemObjs[path] = m
+	alwaysOn := f.cfg.AlwaysOnModems
 	f.mu.Unlock()
 
 	// 立即取消旧订阅
 	if oldCancel != nil {
 		oldCancel()
+	}
+
+	if alwaysOn {
+		if err := m.EnsureEnabled(); err != nil {
+			slog.Warn("自动启用调制解调器失败", "imei", m.EquipmentIdentifier, "error", err)
+		}
 	}
 
 	slog.Info("订阅调制解调器", "imei", m.EquipmentIdentifier, "model", m.Model)
@@ -328,6 +335,14 @@ func (f *Forwarder) UpdateMessageTemplate(deviceName string, inTitle, inBody boo
 	f.mu.Unlock()
 }
 
+// UpdateModemConfig 同步按 IMEI 的模块名和 Always On 开关。
+func (f *Forwarder) UpdateModemConfig(modems []config.ModemConfig, alwaysOn bool) {
+	f.mu.Lock()
+	f.cfg.Modems = append([]config.ModemConfig(nil), modems...)
+	f.cfg.AlwaysOnModems = alwaysOn
+	f.mu.Unlock()
+}
+
 func cloneChannels(channels []config.ChannelConfig) []config.ChannelConfig {
 	if channels == nil {
 		return nil
@@ -349,7 +364,7 @@ func (f *Forwarder) formatMessage(m *modem.Modem, sms *modem.SMS) notifier.Messa
 
 	modemName := f.getModemName(m)
 	f.mu.Lock()
-	deviceName := f.cfg.DeviceName
+	deviceName := f.cfg.ModemDisplayName(m.EquipmentIdentifier)
 	showDeviceInTitle := f.cfg.DeviceNameInTitle
 	showDeviceInBody := f.cfg.DeviceNameInBody
 	f.mu.Unlock()

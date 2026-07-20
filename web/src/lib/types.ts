@@ -13,6 +13,8 @@ export type ModemInfo = {
   signal_quality: number;
   operator_name: string;
   iccid: string;
+  state: string;
+  display_name: string;
 };
 
 export type Message = {
@@ -29,10 +31,17 @@ export type MessagesResponse = {
   total: number;
 };
 
+export type ModemNameEntry = {
+  imei: string;
+  name: string;
+};
+
 export type Settings = {
   device_name: string;
   device_name_in_title: boolean;
   device_name_in_body: boolean;
+  always_on_modems: boolean;
+  modems: ModemNameEntry[];
 };
 
 export type ChannelType =

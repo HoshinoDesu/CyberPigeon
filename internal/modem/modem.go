@@ -8,6 +8,59 @@ import (
 
 const ModemInterface = ModemManagerInterface + ".Modem"
 
+// ModemState ModemManager 调制解调器状态
+// 参考: MMModemState
+type ModemState int32
+
+const (
+	ModemStateFailed        ModemState = -1
+	ModemStateUnknown       ModemState = 0
+	ModemStateInitializing  ModemState = 1
+	ModemStateLocked        ModemState = 2
+	ModemStateDisabled      ModemState = 3
+	ModemStateDisabling     ModemState = 4
+	ModemStateEnabling      ModemState = 5
+	ModemStateEnabled       ModemState = 6
+	ModemStateSearching     ModemState = 7
+	ModemStateRegistered    ModemState = 8
+	ModemStateDisconnecting ModemState = 9
+	ModemStateConnecting    ModemState = 10
+	ModemStateConnected     ModemState = 11
+)
+
+func (s ModemState) String() string {
+	switch s {
+	case ModemStateFailed:
+		return "failed"
+	case ModemStateUnknown:
+		return "unknown"
+	case ModemStateInitializing:
+		return "initializing"
+	case ModemStateLocked:
+		return "locked"
+	case ModemStateDisabled:
+		return "disabled"
+	case ModemStateDisabling:
+		return "disabling"
+	case ModemStateEnabling:
+		return "enabling"
+	case ModemStateEnabled:
+		return "enabled"
+	case ModemStateSearching:
+		return "searching"
+	case ModemStateRegistered:
+		return "registered"
+	case ModemStateDisconnecting:
+		return "disconnecting"
+	case ModemStateConnecting:
+		return "connecting"
+	case ModemStateConnected:
+		return "connected"
+	default:
+		return fmt.Sprintf("state(%d)", int32(s))
+	}
+}
+
 // Modem 调制解调器
 type Modem struct {
 	conn                *dbus.Conn
@@ -16,10 +69,11 @@ type Modem struct {
 	EquipmentIdentifier string // IMEI
 	Model               string
 	Manufacturer        string
-	Number              string // MSISDN
-	SignalQuality       uint32 // 信号质量 (0-100)
-	OperatorName        string // 运营商名称
-	ICCID               string // SIM 卡 ICCID
+	Number              string     // MSISDN
+	SignalQuality       uint32     // 信号质量 (0-100)
+	OperatorName        string     // 运营商名称
+	ICCID               string     // SIM 卡 ICCID
+	State               ModemState // 调制解调器状态
 }
 
 // NewModem 创建调制解调器实例
@@ -66,6 +120,9 @@ func NewModem(conn *dbus.Conn, path dbus.ObjectPath) (*Modem, error) {
 
 	// 获取 ICCID
 	modem.UpdateICCID()
+
+	// 获取调制解调器状态
+	modem.UpdateState()
 
 	return modem, nil
 }
@@ -125,6 +182,44 @@ func (m *Modem) UpdateICCID() {
 			}
 		}
 	}
+}
+
+// UpdateState 更新调制解调器状态
+func (m *Modem) UpdateState() {
+	if variant, err := m.dbusObject.GetProperty(ModemInterface + ".State"); err == nil {
+		switch v := variant.Value().(type) {
+		case int32:
+			m.State = ModemState(v)
+		case uint32:
+			m.State = ModemState(int32(v))
+		}
+	}
+}
+
+// Enable 启用或禁用调制解调器（ModemManager Enable(b)）
+func (m *Modem) Enable(enable bool) error {
+	call := m.dbusObject.Call(ModemInterface+".Enable", 0, enable)
+	if call.Err != nil {
+		action := "禁用"
+		if enable {
+			action = "启用"
+		}
+		return fmt.Errorf("%s调制解调器失败: %w", action, call.Err)
+	}
+	m.UpdateState()
+	return nil
+}
+
+// EnsureEnabled 若当前为 disabled，则尝试启用
+func (m *Modem) EnsureEnabled() error {
+	m.UpdateState()
+	if m.State != ModemStateDisabled {
+		return nil
+	}
+	if err := m.Enable(true); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RunUSSD 执行 USSD 代码

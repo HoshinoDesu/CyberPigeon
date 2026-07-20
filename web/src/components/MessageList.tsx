@@ -16,6 +16,7 @@ type Props = {
   onLoadMore: () => void;
   onDelete: (msg: Message) => void;
   total: number;
+  modemNames: Record<string, string>;
 };
 
 export function MessageList({
@@ -30,6 +31,7 @@ export function MessageList({
   onLoadMore,
   onDelete,
   total,
+  modemNames,
 }: Props) {
   return (
     <div className="mx-auto w-full max-w-[44rem]">
@@ -107,7 +109,12 @@ export function MessageList({
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="headline truncate">{msg.number || "未知号码"}</div>
-                  <div className="caption mono mt-1 truncate">{msg.modem || "—"}</div>
+                  <div className="caption mono mt-1 truncate">
+                    {msg.modem || "—"}
+                    {msg.modem && modemNames[msg.modem] && (
+                      <span className="text-[var(--label-tertiary)]"> · {modemNames[msg.modem]}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <time className="caption whitespace-nowrap">

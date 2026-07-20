@@ -209,6 +209,8 @@ type ModemInfo struct {
 	SignalQuality uint32 `json:"signal_quality"`
 	OperatorName  string `json:"operator_name"`
 	ICCID         string `json:"iccid"`
+	State         string `json:"state"`
+	DisplayName   string `json:"display_name"`
 }
 
 const maxRequestBodySize = 1 << 20 // 1MB
@@ -223,11 +225,16 @@ func (s *Server) handleModems(w http.ResponseWriter, r *http.Request) {
 	modems := s.forwarder.GetModems()
 	infos := make([]ModemInfo, 0, len(modems))
 
+	s.cfgMu.RLock()
+	cfg := s.cfg
+	s.cfgMu.RUnlock()
+
 	for _, modem := range modems {
 		// 更新实时信息
 		modem.UpdateSignalQuality()
 		modem.UpdateOperatorName()
 		modem.UpdateICCID()
+		modem.UpdateState()
 
 		info := ModemInfo{
 			IMEI:          modem.EquipmentIdentifier,
@@ -237,6 +244,8 @@ func (s *Server) handleModems(w http.ResponseWriter, r *http.Request) {
 			SignalQuality: modem.SignalQuality,
 			OperatorName:  modem.OperatorName,
 			ICCID:         modem.ICCID,
+			State:         modem.State.String(),
+			DisplayName:   cfg.ModemDisplayName(modem.EquipmentIdentifier),
 		}
 
 		infos = append(infos, info)
@@ -719,6 +728,8 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		"device_name":          s.cfg.DeviceName,
 		"device_name_in_title": s.cfg.DeviceNameInTitle,
 		"device_name_in_body":  s.cfg.DeviceNameInBody,
+		"always_on_modems":     s.cfg.AlwaysOnModems,
+		"modems":               s.cfg.Modems,
 	}
 	s.cfgMu.RUnlock()
 	writeJSON(w, data)
@@ -732,9 +743,11 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		DeviceName        string `json:"device_name"`
-		DeviceNameInTitle bool   `json:"device_name_in_title"`
-		DeviceNameInBody  bool   `json:"device_name_in_body"`
+		DeviceName        string               `json:"device_name"`
+		DeviceNameInTitle bool                  `json:"device_name_in_title"`
+		DeviceNameInBody  bool                  `json:"device_name_in_body"`
+		AlwaysOnModems    bool                  `json:"always_on_modems"`
+		Modems            []config.ModemConfig  `json:"modems"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -746,6 +759,8 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfg.DeviceName = req.DeviceName
 	s.cfg.DeviceNameInTitle = req.DeviceNameInTitle
 	s.cfg.DeviceNameInBody = req.DeviceNameInBody
+	s.cfg.AlwaysOnModems = req.AlwaysOnModems
+	s.cfg.Modems = append([]config.ModemConfig(nil), req.Modems...)
 
 	// 保存到配置文件
 	if err := s.cfg.Save(s.configPath); err != nil {
@@ -755,6 +770,7 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfgMu.Unlock()
 	s.forwarder.UpdateMessageTemplate(req.DeviceName, req.DeviceNameInTitle, req.DeviceNameInBody)
+	s.forwarder.UpdateModemConfig(req.Modems, req.AlwaysOnModems)
 
 	writeJSON(w, map[string]bool{"success": true})
 }
