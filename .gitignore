@@ -43,5 +43,7 @@ web/.turbo/
 web/tsconfig.tsbuildinfo
 web/next-env.d.ts
 
-# Local agent/tooling caches (skills content lives under .agents/)
+# Local agent/tooling (should not ship with the project)
+.agents/
 .claude/
+skills-lock.json
