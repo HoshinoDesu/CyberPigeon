@@ -19,6 +19,9 @@ import {
   validateManagementPassword,
   validateUssdCode,
   deleteMessage,
+  deleteMessages,
+  exportConfig,
+  importConfig,
 } from "@/lib/api";
 import { createChannelDefault, getChannelLabel } from "@/lib/channels";
 import { formatClockTime } from "@/lib/format";
@@ -33,6 +36,7 @@ import type {
   UssdState,
   WsNewMessage,
 } from "@/lib/types";
+import { EMPTY_USSD_STATE } from "@/lib/types";
 import { AuthGate } from "./AuthGate";
 import { ChannelsPanel } from "./ChannelsPanel";
 import { ConfirmModal } from "./ConfirmModal";
@@ -106,7 +110,9 @@ export function App() {
     device_name_in_body: false,
     always_on_modems: false,
     modems: [],
+    forward_rules: { mode: "off", keywords: [], senders: [] },
   });
+  const [deviceFilter, setDeviceFilter] = useState("");
 
   const [modemsLoading, setModemsLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(true);
@@ -129,12 +135,12 @@ export function App() {
 
   const [lastUpdate, setLastUpdate] = useState("");
   const [page, setPage] = useState<NavKey>("messages");
+  const [scrolled, setScrolled] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("auto");
   const [searchQuery, setSearchQuery] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [newChannelType, setNewChannelType] = useState("");
   const [ussdStates, setUssdStates] = useState<Record<string, UssdState>>({});
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -149,6 +155,14 @@ export function App() {
   useEffect(() => {
     authenticatedRef.current = authenticated;
   }, [authenticated]);
+
+  // 滚动边缘效果：内容滚过大标题区后，顶栏材质与小标题浮现
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 44);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     authEnabledRef.current = authEnabled;
@@ -269,6 +283,11 @@ export function App() {
         device_name_in_body: !!data.device_name_in_body,
         always_on_modems: !!data.always_on_modems,
         modems: Array.isArray(data.modems) ? data.modems : [],
+        forward_rules: {
+          mode: data.forward_rules?.mode || "off",
+          keywords: data.forward_rules?.keywords || [],
+          senders: data.forward_rules?.senders || [],
+        },
       });
     } catch (e) {
       if (handleAuthFailure(e)) return;
@@ -391,19 +410,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredMessages = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter(
-      (msg) =>
-        (msg.text && msg.text.toLowerCase().includes(q)) ||
-        (msg.number && msg.number.includes(q)) ||
-        (msg.modem && msg.modem.toLowerCase().includes(q)),
-    );
-  }, [messages, searchQuery]);
-
-  const hasMoreMessages = messages.length < totalMessages;
-
   const modemNames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const m of settings.modems) {
@@ -411,6 +417,25 @@ export function App() {
     }
     return map;
   }, [settings.modems]);
+
+  const filteredMessages = useMemo(() => {
+    let list = messages;
+    if (deviceFilter) {
+      list = list.filter((msg) => msg.modem === deviceFilter);
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (msg) =>
+        (msg.text && msg.text.toLowerCase().includes(q)) ||
+        (msg.number && msg.number.includes(q)) ||
+        (msg.modem &&
+          (msg.modem.toLowerCase().includes(q) ||
+            modemNames[msg.modem]?.toLowerCase().includes(q))),
+    );
+  }, [messages, searchQuery, modemNames, deviceFilter]);
+
+  const hasMoreMessages = messages.length < totalMessages;
 
   const toggleTheme = () => {
     const themes: ThemeMode[] = ["dark", "light", "auto"];
@@ -505,7 +530,20 @@ export function App() {
   const onSaveSettings = async () => {
     try {
       setSettingsSaving(true);
-      await saveSettings(settings);
+      const cleaned: Settings = {
+        ...settings,
+        forward_rules: {
+          ...settings.forward_rules,
+          keywords: settings.forward_rules.keywords
+            .map((s) => s.trim())
+            .filter(Boolean),
+          senders: settings.forward_rules.senders
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+      };
+      await saveSettings(cleaned);
+      setSettings(cleaned);
       showToast("设置已保存成功", "success");
     } catch (e) {
       if (handleAuthFailure(e)) return;
@@ -554,11 +592,8 @@ export function App() {
     }
   };
 
-  const onAddChannel = () => {
-    if (!newChannelType) return;
-    const type = newChannelType as ChannelType;
+  const onAddChannel = (type: ChannelType) => {
     setChannels((prev) => [...prev, createChannelDefault(type)]);
-    setNewChannelType("");
     showToast(`已添加 ${getChannelLabel(type)} 通道`, "success");
   };
 
@@ -582,12 +617,7 @@ export function App() {
   };
 
   const onRunUssd = async (modem: ModemInfo) => {
-    const state = ussdStates[modem.imei] || {
-      code: "",
-      result: "",
-      loading: false,
-      error: "",
-    };
+    const state = ussdStates[modem.imei] || EMPTY_USSD_STATE;
     if (!state.code) {
       showToast("请输入 USSD 代码", "warning");
       return;
@@ -645,8 +675,22 @@ export function App() {
     }
   };
 
+  const doDeleteMany = async (ids: string[]) => {
+    try {
+      const deleted = await deleteMessages(ids);
+      const idSet = new Set(ids);
+      setMessages((prev) => prev.filter((m) => !idSet.has(m.id)));
+      setTotalMessages((prev) => Math.max(0, prev - deleted));
+      showToast(`已删除 ${deleted} 条短信`, "success");
+    } catch (e) {
+      if (handleAuthFailure(e)) return;
+      showToast(`批量删除失败: ${(e as Error).message}`, "error");
+    }
+  };
+
   const switchPage = (key: NavKey) => {
     setPage(key);
+    window.scrollTo({ top: 0 });
     if (key === "channels" && !channelsLoadedRef.current && !channelsLoading) {
       void loadChannels();
     }
@@ -759,16 +803,15 @@ export function App() {
       </aside>
 
       <div className="app-main">
-        <header className="app-top">
+        <header className="app-top" data-scrolled={scrolled}>
           <div className="min-w-0">
-            <div className="truncate text-[1.05rem] font-semibold tracking-[-0.025em]">
+            <div className="app-top-title truncate text-[1.05rem] font-semibold tracking-[-0.025em]">
               {meta.title}
             </div>
             <div className="flex items-center gap-1.5 md:hidden">
               <span className="status-live" data-off={!wsConnected} />
               <span className="caption truncate">{statusText}</span>
             </div>
-            <p className="caption hidden truncate md:block">{meta.subtitle}</p>
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <div className="hidden min-w-[13rem] max-w-[18rem] sm:block lg:hidden">
@@ -800,25 +843,37 @@ export function App() {
           </div>
         </header>
 
-        <main className="app-content">
+        <main className="app-content page-enter" key={page}>
           {page === "messages" && (
-            <MessageList
-              messages={messages}
-              filtered={filteredMessages}
-              loading={messagesLoading}
-              error={messagesError}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              hasMore={hasMoreMessages}
-              loadingMore={loadingMore}
-              total={totalMessages}
-              modemNames={modemNames}
-              onLoadMore={() => {
-                if (!hasMoreMessages || loadingMore) return;
-                void loadMessages(true);
-              }}
-              onDelete={confirmDelete}
-            />
+            <div className="mx-auto w-full max-w-[44rem]">
+              <div className="mb-5">
+                <h1 className="display">消息</h1>
+              </div>
+              <MessageList
+                messages={messages}
+                filtered={filteredMessages}
+                loading={messagesLoading}
+                error={messagesError}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                hasMore={hasMoreMessages}
+                loadingMore={loadingMore}
+                total={totalMessages}
+                modemNames={modemNames}
+                modems={modems}
+                deviceFilter={deviceFilter}
+                onDeviceFilterChange={setDeviceFilter}
+                onLoadMore={() => {
+                  if (!hasMoreMessages || loadingMore) return;
+                  void loadMessages(true);
+                }}
+                onDelete={confirmDelete}
+                onDeleteMany={(ids) => void doDeleteMany(ids)}
+                onRefresh={async () => {
+                  await Promise.all([loadMessages(false), loadModems()]);
+                }}
+              />
+            </div>
           )}
 
           {page === "devices" && (
@@ -854,8 +909,11 @@ export function App() {
                 error={channelsError}
                 saving={channelsSaving}
                 testing={testingChannels}
-                newChannelType={newChannelType}
-                onNewChannelTypeChange={setNewChannelType}
+                forwardRules={settings.forward_rules}
+                onForwardRulesChange={(next) =>
+                  setSettings((prev) => ({ ...prev, forward_rules: next }))
+                }
+                onSaveForwardRules={() => void onSaveSettings()}
                 onChange={(index, next) =>
                   setChannels((prev) =>
                     prev.map((item, i) => (i === index ? next : item)),
@@ -885,6 +943,24 @@ export function App() {
                   setPasswordForm((prev) => ({ ...prev, [field]: value }))
                 }
                 onSubmit={() => void onChangePassword()}
+                onExportConfig={() => {
+                  void exportConfig().catch((e: unknown) => {
+                    if (handleAuthFailure(e)) return;
+                    showToast(`导出失败: ${(e as Error).message}`, "error");
+                  });
+                }}
+                onImportConfig={(file) => {
+                  void (async () => {
+                    try {
+                      await importConfig(file);
+                      showToast("配置已导入并生效", "success");
+                      await Promise.all([loadSettings(), loadChannels()]);
+                    } catch (e) {
+                      if (handleAuthFailure(e)) return;
+                      showToast(`导入失败: ${(e as Error).message}`, "error", 5000);
+                    }
+                  })();
+                }}
               />
             </div>
           )}

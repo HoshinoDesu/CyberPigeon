@@ -272,6 +272,25 @@ func (s *Storage) Delete(id string) error {
 	return nil
 }
 
+// DeleteMany 批量删除消息，返回实际删除条数
+func (s *Storage) DeleteMany(ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	result, err := s.db.Exec("DELETE FROM messages WHERE id IN ("+placeholders+")", args...)
+	if err != nil {
+		return 0, fmt.Errorf("批量删除消息: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	return affected, nil
+}
+
 // Close 关闭存储
 func (s *Storage) Close() error {
 	if s.db != nil {

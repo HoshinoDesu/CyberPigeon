@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 type Props = {
   open: boolean;
   title: string;
@@ -21,12 +23,32 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
 }: Props) {
-  if (!open) return null;
+  // 退出沿进入的同一路径反向播放，动画结束后再卸载
+  const [render, setRender] = useState(open);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      setClosing(false);
+      return;
+    }
+    if (!render) return;
+    setClosing(true);
+    const timer = window.setTimeout(() => {
+      setRender(false);
+      setClosing(false);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [open, render]);
+
+  if (!render) return null;
 
   return (
-    <div className="modal-scrim" onClick={onCancel}>
+    <div className="modal-scrim" data-closing={closing} onClick={onCancel}>
       <div
         className="modal"
+        data-closing={closing}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-title"

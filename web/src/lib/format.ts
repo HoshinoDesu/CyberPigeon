@@ -23,14 +23,6 @@ export function formatClockTime(date = new Date()): string {
   });
 }
 
-export function getSignalClass(q: number): string {
-  if (q >= 80) return "signal-excellent";
-  if (q >= 60) return "signal-good";
-  if (q >= 40) return "signal-fair";
-  if (q > 0) return "signal-poor";
-  return "signal-none";
-}
-
 export function getSignalColor(q: number): string {
   if (q >= 80) return "var(--signal-excellent)";
   if (q >= 60) return "var(--signal-good)";

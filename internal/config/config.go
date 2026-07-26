@@ -16,11 +16,52 @@ type Config struct {
 	DeviceName        string          `toml:"device_name"`
 	DeviceNameInTitle bool            `toml:"device_name_in_title"` // 设备名是否出现在推送标题中
 	DeviceNameInBody  bool            `toml:"device_name_in_body"`  // 设备名是否出现在推送正文中
-	AlwaysOnModems    bool            `toml:"always_on_modems"`    // 发现 disabled 模块时自动 Enable
-	Modems            []ModemConfig   `toml:"modems"`              // 按模块（IMEI）的独立设置
+	AlwaysOnModems    bool            `toml:"always_on_modems"`     // 发现 disabled 模块时自动 Enable
+	Modems            []ModemConfig   `toml:"modems"`               // 按模块（IMEI）的独立设置
+	ForwardRules      ForwardRules    `toml:"forward_rules"`        // 转发过滤规则
 	Storage           StorageConfig   `toml:"storage"`
 	Server            ServerConfig    `toml:"server"`
 	Channels          []ChannelConfig `toml:"channels"`
+}
+
+// ForwardRules 转发过滤规则。仅影响推送，不影响本地存储。
+type ForwardRules struct {
+	// Mode: "off" 不过滤 | "blacklist" 命中即拦截 | "whitelist" 命中才转发
+	Mode     string   `toml:"mode" json:"mode"`
+	Keywords []string `toml:"keywords" json:"keywords"` // 匹配短信内容（包含即命中，不区分大小写）
+	Senders  []string `toml:"senders" json:"senders"`   // 匹配发件号码（包含即命中）
+}
+
+// ShouldForward 判断一条短信是否应该推送。
+func (r ForwardRules) ShouldForward(sender, text string) bool {
+	mode := strings.ToLower(strings.TrimSpace(r.Mode))
+	if mode != "blacklist" && mode != "whitelist" {
+		return true
+	}
+
+	hit := false
+	lowText := strings.ToLower(text)
+	for _, kw := range r.Keywords {
+		kw = strings.ToLower(strings.TrimSpace(kw))
+		if kw != "" && strings.Contains(lowText, kw) {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		for _, s := range r.Senders {
+			s = strings.TrimSpace(s)
+			if s != "" && strings.Contains(sender, s) {
+				hit = true
+				break
+			}
+		}
+	}
+
+	if mode == "blacklist" {
+		return !hit
+	}
+	return hit
 }
 
 // ModemConfig 单个调制解调器的持久化设置
@@ -111,6 +152,12 @@ func (c *Config) Clone() *Config {
 	if c.Modems != nil {
 		clone.Modems = append([]ModemConfig(nil), c.Modems...)
 	}
+	if c.ForwardRules.Keywords != nil {
+		clone.ForwardRules.Keywords = append([]string(nil), c.ForwardRules.Keywords...)
+	}
+	if c.ForwardRules.Senders != nil {
+		clone.ForwardRules.Senders = append([]string(nil), c.ForwardRules.Senders...)
+	}
 	if c.Channels != nil {
 		clone.Channels = make([]ChannelConfig, len(c.Channels))
 		for i, ch := range c.Channels {
@@ -138,39 +185,6 @@ func (c *Config) ModemDisplayName(imei string) string {
 		}
 	}
 	return strings.TrimSpace(c.DeviceName)
-}
-
-// UpsertModemName 写入或更新指定 IMEI 的模块显示名；name 为空时删除该条目。
-func (c *Config) UpsertModemName(imei, name string) {
-	if c == nil {
-		return
-	}
-	imei = strings.TrimSpace(imei)
-	name = strings.TrimSpace(name)
-	if imei == "" {
-		return
-	}
-
-	next := make([]ModemConfig, 0, len(c.Modems)+1)
-	found := false
-	for _, m := range c.Modems {
-		mIMEI := strings.TrimSpace(m.IMEI)
-		if mIMEI == "" {
-			continue
-		}
-		if mIMEI == imei {
-			found = true
-			if name != "" {
-				next = append(next, ModemConfig{IMEI: imei, Name: name})
-			}
-			continue
-		}
-		next = append(next, ModemConfig{IMEI: mIMEI, Name: strings.TrimSpace(m.Name)})
-	}
-	if !found && name != "" {
-		next = append(next, ModemConfig{IMEI: imei, Name: name})
-	}
-	c.Modems = next
 }
 
 // CloneChannelConfig 返回单个通道配置的深拷贝。
@@ -339,20 +353,22 @@ func (c *Config) Save(path string) error {
 
 	// 构建用于保存的配置，过滤掉每个通道不相关的字段
 	saveConfig := struct {
-		DeviceName        string         `toml:"device_name,omitempty"`
-		DeviceNameInTitle bool           `toml:"device_name_in_title"`
-		DeviceNameInBody  bool           `toml:"device_name_in_body"`
-		AlwaysOnModems    bool           `toml:"always_on_modems"`
-		Modems            []ModemConfig  `toml:"modems,omitempty"`
-		Storage           StorageConfig  `toml:"storage"`
-		Server            ServerConfig   `toml:"server"`
-		Channels          []any          `toml:"channels"`
+		DeviceName        string        `toml:"device_name,omitempty"`
+		DeviceNameInTitle bool          `toml:"device_name_in_title"`
+		DeviceNameInBody  bool          `toml:"device_name_in_body"`
+		AlwaysOnModems    bool          `toml:"always_on_modems"`
+		Modems            []ModemConfig `toml:"modems,omitempty"`
+		ForwardRules      ForwardRules  `toml:"forward_rules"`
+		Storage           StorageConfig `toml:"storage"`
+		Server            ServerConfig  `toml:"server"`
+		Channels          []any         `toml:"channels"`
 	}{
 		DeviceName:        c.DeviceName,
 		DeviceNameInTitle: c.DeviceNameInTitle,
 		DeviceNameInBody:  c.DeviceNameInBody,
 		AlwaysOnModems:    c.AlwaysOnModems,
 		Modems:            append([]ModemConfig(nil), c.Modems...),
+		ForwardRules:      c.ForwardRules,
 		Storage:           c.Storage,
 		Server:            c.Server,
 		Channels:          make([]any, 0, len(c.Channels)),

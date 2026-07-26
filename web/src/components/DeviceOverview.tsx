@@ -1,7 +1,8 @@
 "use client";
 
-import { getSignalClass, getSignalColor } from "@/lib/format";
+import { getSignalColor } from "@/lib/format";
 import type { ModemInfo } from "@/lib/types";
+import { SignalBars } from "./SignalBars";
 
 type Props = {
   modems: ModemInfo[];
@@ -74,12 +75,7 @@ export function DeviceOverview({
       </div>
 
       <div className="mt-2.5 flex items-center gap-2">
-        <div className="signal-track min-w-0 flex-1">
-          <div
-            className={`signal-fill ${getSignalClass(q)}`}
-            style={{ width: `${Math.max(0, Math.min(100, q))}%` }}
-          />
-        </div>
+        <SignalBars quality={q} />
         <span
           className="mono shrink-0 text-[0.75rem] font-semibold tabular-nums"
           style={{ color: getSignalColor(q) }}

@@ -247,9 +247,14 @@ func (f *Forwarder) handleMessage(m *modem.Modem, sms *modem.SMS) error {
 	f.mu.Lock()
 	n := f.notifier
 	hasChannels := len(f.cfg.Channels) > 0
+	rules := f.cfg.ForwardRules
 	f.mu.Unlock()
 
 	if hasChannels && n != nil {
+		if !rules.ShouldForward(sms.Number, sms.Text) {
+			slog.Info("按转发规则跳过推送", "from", sms.Number, "mode", rules.Mode)
+			return nil
+		}
 		msg := f.formatMessage(m, sms)
 		if err := n.Send(msg); err != nil {
 			slog.Error("发送通知失败", "error", err)
@@ -335,12 +340,38 @@ func (f *Forwarder) UpdateMessageTemplate(deviceName string, inTitle, inBody boo
 	f.mu.Unlock()
 }
 
+// UpdateForwardRules 同步转发过滤规则。
+func (f *Forwarder) UpdateForwardRules(rules config.ForwardRules) {
+	f.mu.Lock()
+	f.cfg.ForwardRules = config.ForwardRules{
+		Mode:     rules.Mode,
+		Keywords: append([]string(nil), rules.Keywords...),
+		Senders:  append([]string(nil), rules.Senders...),
+	}
+	f.mu.Unlock()
+}
+
 // UpdateModemConfig 同步按 IMEI 的模块名和 Always On 开关。
+// 开关打开时立即对现有 disabled 模块补一次启用，而不是等到下次接入。
 func (f *Forwarder) UpdateModemConfig(modems []config.ModemConfig, alwaysOn bool) {
 	f.mu.Lock()
 	f.cfg.Modems = append([]config.ModemConfig(nil), modems...)
+	wasOn := f.cfg.AlwaysOnModems
 	f.cfg.AlwaysOnModems = alwaysOn
+	var existing []*modem.Modem
+	if alwaysOn && !wasOn {
+		existing = make([]*modem.Modem, 0, len(f.modemObjs))
+		for _, m := range f.modemObjs {
+			existing = append(existing, m)
+		}
+	}
 	f.mu.Unlock()
+
+	for _, m := range existing {
+		if err := m.EnsureEnabled(); err != nil {
+			slog.Warn("自动启用调制解调器失败", "imei", m.EquipmentIdentifier, "error", err)
+		}
+	}
 }
 
 func cloneChannels(channels []config.ChannelConfig) []config.ChannelConfig {

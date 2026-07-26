@@ -12,16 +12,20 @@ export const CHANNEL_LABELS: Record<string, string> = {
   telegram: "Telegram 推送",
 };
 
-export const CHANNEL_OPTIONS: { value: ChannelType; label: string }[] = [
-  { value: "email", label: "Email 邮件推送" },
-  { value: "bark", label: "Bark 推送" },
-  { value: "gotify", label: "Gotify 推送" },
-  { value: "serverchan", label: "Server酱3 推送" },
-  { value: "webhook", label: "Webhook 推送" },
-  { value: "wecom", label: "企业微信推送" },
-  { value: "feishu", label: "飞书推送" },
-  { value: "dingtalk", label: "钉钉推送" },
-  { value: "telegram", label: "Telegram 推送" },
+export const CHANNEL_OPTIONS: {
+  value: ChannelType;
+  label: string;
+  short: string;
+}[] = [
+  { value: "email", label: "Email 邮件推送", short: "邮件" },
+  { value: "bark", label: "Bark 推送", short: "Bark" },
+  { value: "gotify", label: "Gotify 推送", short: "Gotify" },
+  { value: "serverchan", label: "Server酱3 推送", short: "Server酱" },
+  { value: "webhook", label: "Webhook 推送", short: "Webhook" },
+  { value: "wecom", label: "企业微信推送", short: "企业微信" },
+  { value: "feishu", label: "飞书推送", short: "飞书" },
+  { value: "dingtalk", label: "钉钉推送", short: "钉钉" },
+  { value: "telegram", label: "Telegram 推送", short: "Telegram" },
 ];
 
 export function getChannelLabel(type: string): string {

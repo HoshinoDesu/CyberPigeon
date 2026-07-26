@@ -36,12 +36,21 @@ export type ModemNameEntry = {
   name: string;
 };
 
+export type ForwardRulesMode = "off" | "blacklist" | "whitelist";
+
+export type ForwardRules = {
+  mode: ForwardRulesMode;
+  keywords: string[];
+  senders: string[];
+};
+
 export type Settings = {
   device_name: string;
   device_name_in_title: boolean;
   device_name_in_body: boolean;
   always_on_modems: boolean;
   modems: ModemNameEntry[];
+  forward_rules: ForwardRules;
 };
 
 export type ChannelType =
@@ -115,6 +124,13 @@ export type UssdState = {
   result: string;
   loading: boolean;
   error: string;
+};
+
+export const EMPTY_USSD_STATE: UssdState = {
+  code: "",
+  result: "",
+  loading: false,
+  error: "",
 };
 
 export type ToastItem = {

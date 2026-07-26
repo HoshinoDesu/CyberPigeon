@@ -7,7 +7,12 @@ import {
   getChannelLabel,
   toStr,
 } from "@/lib/channels";
-import type { ChannelConfig } from "@/lib/types";
+import type {
+  ChannelConfig,
+  ChannelType,
+  ForwardRules,
+  ForwardRulesMode,
+} from "@/lib/types";
 import { IconChevron, IconPlus, IconTrash } from "./icons";
 import { PasswordInput } from "./PasswordInput";
 
@@ -17,14 +22,21 @@ type Props = {
   error: string | null;
   saving: boolean;
   testing: boolean;
-  newChannelType: string;
-  onNewChannelTypeChange: (v: string) => void;
+  forwardRules: ForwardRules;
+  onForwardRulesChange: (next: ForwardRules) => void;
+  onSaveForwardRules: () => void;
   onChange: (index: number, next: ChannelConfig) => void;
-  onAdd: () => void;
+  onAdd: (type: ChannelType) => void;
   onRemove: (index: number) => void;
   onSave: () => void;
   onTest: () => void;
 };
+
+const RULE_MODES: { value: ForwardRulesMode; label: string }[] = [
+  { value: "off", label: "关闭" },
+  { value: "blacklist", label: "黑名单" },
+  { value: "whitelist", label: "白名单" },
+];
 
 function channelSummary(ch: ChannelConfig): string {
   switch (ch.type) {
@@ -405,8 +417,9 @@ export function ChannelsPanel({
   error,
   saving,
   testing,
-  newChannelType,
-  onNewChannelTypeChange,
+  forwardRules,
+  onForwardRulesChange,
+  onSaveForwardRules,
   onChange,
   onAdd,
   onRemove,
@@ -415,6 +428,8 @@ export function ChannelsPanel({
 }: Props) {
   // Default collapsed. Only auto-expand when the user adds exactly one channel.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const prevLenRef = useRef(0);
 
   useEffect(() => {
@@ -489,7 +504,7 @@ export function ChannelsPanel({
         </button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="stagger flex flex-col gap-3">
         {channels.map((ch, index) => {
           const key = `${ch.type}-${index}`;
           const open = !!expanded[key];
@@ -501,12 +516,12 @@ export function ChannelsPanel({
               <div className="flex items-center gap-2 px-3 py-3">
                 <button
                   type="button"
-                  className="pressable flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                  className="row-press flex min-w-0 flex-1 items-center gap-2.5 text-left"
                   onClick={() => toggle(key)}
                   aria-expanded={open}
                 >
                   <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-[var(--label-secondary)] transition-transform duration-200"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-[var(--label-secondary)] transition-transform duration-[280ms] ease-[var(--ease-drawer)]"
                     style={{
                       transform: open ? "rotate(90deg)" : "rotate(0deg)",
                     }}
@@ -532,7 +547,7 @@ export function ChannelsPanel({
                         {ch.enabled ? "已启用" : "未启用"}
                       </span>
                     </span>
-                    <span className="caption truncate-safe mt-1 block">
+                    <span className="caption truncate-safe mt-1 block !text-[var(--label-secondary)]">
                       {channelSummary(ch)}
                     </span>
                   </span>
@@ -565,43 +580,166 @@ export function ChannelsPanel({
                 )}
               </div>
 
-              {open && (
-                <div className="flex flex-col gap-3 border-t border-[var(--hairline)] px-4 pt-3 pb-4">
-                  <ChannelFields
-                    ch={ch}
-                    onChange={(next) => onChange(index, next)}
-                  />
+              <div className="disclosure" data-open={open}>
+                <div className="disclosure-inner">
+                  <div className="disclosure-content flex flex-col gap-3 border-t border-[var(--hairline)] px-4 pt-3 pb-4">
+                    <ChannelFields
+                      ch={ch}
+                      onChange={(next) => onChange(index, next)}
+                    />
+                  </div>
                 </div>
-              )}
+              </div>
             </section>
           );
         })}
       </div>
 
-      <div className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)] p-3">
-        <select
-          className="field mb-2"
-          value={newChannelType}
-          onChange={(e) => onNewChannelTypeChange(e.target.value)}
-        >
-          <option value="" disabled>
-            选择通道类型…
-          </option>
-          {CHANNEL_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+      <div className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)]">
         <button
           type="button"
-          className="btn w-full"
-          disabled={!newChannelType}
-          onClick={onAdd}
+          className="picker-toggle row-press flex w-full items-center gap-2.5 px-3 py-3 text-left"
+          aria-expanded={pickerOpen}
+          onClick={() => setPickerOpen((v) => !v)}
         >
-          <IconPlus size={16} />
-          添加通道
+          <span className="picker-toggle-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-[var(--label-secondary)]">
+            <IconPlus size={16} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="subhead block">添加通道</span>
+            <span className="caption mt-0.5 block">
+              同一类型可以添加多个通道
+            </span>
+          </span>
         </button>
+        <div className="disclosure" data-open={pickerOpen}>
+          <div className="disclosure-inner">
+            <div className="disclosure-content border-t border-[var(--hairline)] px-3 pt-3 pb-3.5">
+              <div className="flex flex-wrap gap-2">
+                {CHANNEL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="chip"
+                    onClick={() => {
+                      onAdd(opt.value);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    {opt.short}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 转发规则 */}
+      <div className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)]">
+        <button
+          type="button"
+          className="row-press flex w-full items-center gap-2.5 px-3 py-3 text-left"
+          aria-expanded={rulesOpen}
+          onClick={() => setRulesOpen((v) => !v)}
+        >
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-[var(--label-secondary)] transition-transform duration-[280ms] ease-[var(--ease-drawer)]"
+            style={{ transform: rulesOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+          >
+            <IconChevron size={16} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="subhead">转发规则</span>
+              <span
+                className="rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold"
+                style={
+                  forwardRules.mode !== "off"
+                    ? {
+                        background:
+                          "color-mix(in srgb, var(--green) 16%, transparent)",
+                        color: "var(--green)",
+                      }
+                    : {
+                        background: "var(--fill-secondary)",
+                        color: "var(--label-tertiary)",
+                      }
+                }
+              >
+                {RULE_MODES.find((m) => m.value === forwardRules.mode)?.label ||
+                  "关闭"}
+              </span>
+            </span>
+            <span className="caption mt-0.5 block">
+              按关键词或号码过滤推送，不影响本地存储
+            </span>
+          </span>
+        </button>
+        <div className="disclosure" data-open={rulesOpen}>
+          <div className="disclosure-inner">
+            <div className="disclosure-content flex flex-col gap-3 border-t border-[var(--hairline)] px-4 pt-3 pb-4">
+              <div>
+                <label className="label">模式</label>
+                <div className="seg">
+                  {RULE_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      className="seg-item"
+                      data-active={forwardRules.mode === m.value}
+                      onClick={() =>
+                        onForwardRulesChange({ ...forwardRules, mode: m.value })
+                      }
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="caption mt-1.5">
+                  黑名单：命中即不推送；白名单：仅命中才推送
+                </p>
+              </div>
+              <div>
+                <label className="label">关键词（每行一个，匹配短信内容）</label>
+                <textarea
+                  className="field"
+                  rows={3}
+                  placeholder={"贷款\n优惠"}
+                  value={forwardRules.keywords.join("\n")}
+                  onChange={(e) =>
+                    onForwardRulesChange({
+                      ...forwardRules,
+                      keywords: e.target.value.split("\n"),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="label">号码（每行一个，包含即命中）</label>
+                <textarea
+                  className="field"
+                  rows={3}
+                  placeholder={"10086\n+86138"}
+                  value={forwardRules.senders.join("\n")}
+                  onChange={(e) =>
+                    onForwardRulesChange({
+                      ...forwardRules,
+                      senders: e.target.value.split("\n"),
+                    })
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                className="btn w-full"
+                onClick={onSaveForwardRules}
+              >
+                保存规则
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="sticky-action">

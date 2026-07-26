@@ -76,10 +76,10 @@ func TestLocalOnlyListenAddrPreservesLoopback(t *testing.T) {
 	tests := map[string]string{
 		"127.0.0.1:9090": "127.0.0.1:9090",
 		"localhost:9090": "localhost:9090",
-		"[::1]:9090": "[::1]:9090",
-		"0.0.0.0:9090": "127.0.0.1:9090",
-		":9090": "127.0.0.1:9090",
-		"9090": "127.0.0.1:9090",
+		"[::1]:9090":     "[::1]:9090",
+		"0.0.0.0:9090":   "127.0.0.1:9090",
+		":9090":          "127.0.0.1:9090",
+		"9090":           "127.0.0.1:9090",
 	}
 	for input, want := range tests {
 		if got := localOnlyListenAddr(input); got != want {

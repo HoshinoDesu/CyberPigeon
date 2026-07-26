@@ -135,6 +135,38 @@ export async function deleteMessage(id: string): Promise<void> {
   if (!res.ok) throw new Error(await readErrorText(res));
 }
 
+export async function deleteMessages(ids: string[]): Promise<number> {
+  const res = await apiFetch("/api/messages/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(await readErrorText(res));
+  const data = (await res.json()) as { deleted?: number };
+  return data.deleted ?? ids.length;
+}
+
+export async function exportConfig(): Promise<void> {
+  const res = await apiFetch("/api/config/export");
+  if (!res.ok) throw new Error(await readErrorText(res));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "cyberpigeon-config.toml";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function importConfig(file: File): Promise<void> {
+  const res = await apiFetch("/api/config/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/toml" },
+    body: file,
+  });
+  if (!res.ok) throw new Error(await readErrorText(res));
+}
+
 export async function getSettings(): Promise<Settings> {
   const res = await apiFetch("/api/settings");
   if (!res.ok) throw new Error(await readErrorText(res));

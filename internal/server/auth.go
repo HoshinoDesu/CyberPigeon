@@ -13,11 +13,11 @@ import (
 const authCookieName = "cyberpigeon_session"
 
 type authRateLimiter struct {
-	mu        sync.Mutex
-	maxFails  int
-	maxKeys   int
-	window    time.Duration
-	entries   map[string][]time.Time
+	mu       sync.Mutex
+	maxFails int
+	maxKeys  int
+	window   time.Duration
+	entries  map[string][]time.Time
 }
 
 func newAuthRateLimiter(maxFails int, window time.Duration) *authRateLimiter {

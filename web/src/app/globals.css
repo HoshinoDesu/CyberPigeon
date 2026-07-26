@@ -50,6 +50,8 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
+  /* 轻微过冲（约 4%），仅用于带动量的物理控件（如开关拨动） */
+  --ease-bounce: cubic-bezier(0.34, 1.3, 0.64, 1);
 
   --font: var(--font-noto-sc), var(--font-noto), "Noto Sans SC", "Noto Sans",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
@@ -129,6 +131,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* 单色反色选区，与黑白系统一致 */
+::selection {
+  background: var(--label);
+  color: var(--bg);
+}
+
 button,
 input,
 textarea,
@@ -148,6 +156,37 @@ button {
 }
 .pressable:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+/* iOS 列表行按压反馈：内容按下即时变暗，松开缓释回弹（宽行不做缩放） */
+.row-press {
+  transition: opacity 200ms var(--ease-out);
+}
+.row-press:active:not(:disabled) {
+  opacity: 0.55;
+  transition-duration: 0ms;
+}
+
+/* 可折叠区域：grid-rows 过渡实现平滑展开/收起，进出走同一路径 */
+.disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--ease-drawer);
+}
+.disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.disclosure-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.disclosure-content {
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+}
+.disclosure[data-open="true"] .disclosure-content {
+  opacity: 1;
+  transition: opacity 220ms var(--ease-out) 60ms;
 }
 
 .display {
@@ -278,6 +317,16 @@ button {
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn:focus-visible,
+.seg-item:focus-visible,
+.tab-item:focus-visible,
+.rail-nav-item:focus-visible,
+.device-overview-btn:focus-visible,
+.row-press:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--label) 28%, transparent);
 }
 
 .btn-primary {
@@ -417,6 +466,7 @@ select.field {
   padding-bottom: calc(4.75rem + var(--safe-b));
 }
 
+/* 滚动边缘效果：顶栏默认透明，内容滚入其下时材质与分割线才浮现 */
 .app-top {
   position: sticky;
   top: 0;
@@ -427,10 +477,28 @@ select.field {
   gap: 0.75rem;
   min-height: calc(var(--nav-h) + var(--safe-t));
   padding: calc(0.55rem + var(--safe-t)) 1rem 0.55rem;
+  background: transparent;
+  border-bottom: 0.5px solid transparent;
+  transition: background 220ms var(--ease-out), border-color 220ms var(--ease-out);
+}
+
+.app-top[data-scrolled="true"] {
   background: var(--chrome);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 0.5px solid var(--hairline);
+  border-bottom-color: var(--hairline);
+}
+
+/* iOS 大标题：顶栏小标题仅在内容大标题滚出后浮现 */
+.app-top-title {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+
+.app-top[data-scrolled="true"] .app-top-title {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .app-content {
@@ -576,14 +644,16 @@ select.field {
 
 .switch-thumb {
   position: absolute;
-  top: 0.15rem;
+  top: 50%;
   left: 0.15rem;
   width: 1.3rem;
   height: 1.3rem;
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-  transition: transform 180ms var(--ease-out);
+  /* translateY 居中避免亚像素偏移；拨动自带动量，允许轻微过冲 */
+  transform: translateY(-50%);
+  transition: transform 260ms var(--ease-bounce), width 180ms var(--ease-out);
 }
 
 .switch input:checked + .switch-track {
@@ -592,7 +662,7 @@ select.field {
 }
 
 .switch input:checked + .switch-track .switch-thumb {
-  transform: translateX(1.1rem);
+  transform: translateY(-50%) translateX(1.1rem);
 }
 
 .switch input:focus-visible + .switch-track {
@@ -608,7 +678,7 @@ select.field {
 }
 
 .switch:active input:checked + .switch-track .switch-thumb {
-  transform: translateX(0.95rem);
+  transform: translateY(-50%) translateX(0.95rem);
 }
 
 [data-theme="light"] .switch-thumb {
@@ -649,6 +719,7 @@ select.field {
     grid-template-columns: var(--rail-w) 1fr;
   }
 
+  /* rail 底下是纯色背景，blur 无视觉收益，用实色省 GPU */
   .app-rail {
     display: flex;
     position: sticky;
@@ -657,9 +728,7 @@ select.field {
     flex-direction: column;
     padding: calc(1rem + var(--safe-t)) 0.85rem 1rem;
     border-right: 0.5px solid var(--hairline);
-    background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
-    backdrop-filter: saturate(160%) blur(18px);
-    -webkit-backdrop-filter: saturate(160%) blur(18px);
+    background: color-mix(in srgb, var(--bg-elevated) 55%, var(--bg));
   }
 
   .app-main {
@@ -728,6 +797,7 @@ select.field {
   opacity: 1;
   transform: translateY(0) scale(1);
   transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+  animation: rise 260ms var(--ease-out);
 }
 
 .toast[data-leaving="true"] {
@@ -771,6 +841,15 @@ select.field {
   animation: pop 240ms var(--ease-spring);
 }
 
+/* 关闭沿进入路径反向：同 scale + fade，镜像播放 */
+.modal-scrim[data-closing="true"] {
+  animation: fade 180ms var(--ease-out) reverse forwards;
+}
+
+.modal[data-closing="true"] {
+  animation: pop 200ms var(--ease-out) reverse forwards;
+}
+
 @keyframes fade {
   from {
     opacity: 0;
@@ -793,6 +872,11 @@ select.field {
 
 .message-enter {
   animation: rise 280ms var(--ease-out) both;
+}
+
+/* 页面切换：内容轻微上浮进入；backwards 确保结束后不残留 transform */
+.page-enter {
+  animation: rise 300ms var(--ease-out) backwards;
 }
 
 @keyframes rise {
@@ -828,32 +912,263 @@ select.field {
   animation-delay: 180ms;
 }
 
-.signal-track {
-  height: 0.35rem;
-  border-radius: 999px;
+/* 骨架屏 */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
   background: var(--fill-tertiary);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--label) 5%, transparent) 50%,
+    transparent 70%
+  );
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* 滑动删除：卡片内容层 + 底层删除动作 */
+.swipe-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
+.swipe-action {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--red);
+  color: #fff;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.swipe-content {
+  position: relative;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+/* 筛选芯片行 */
+.filter-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scrollbar-width: none;
+}
+
+.filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-chip {
+  appearance: none;
+  border: 0.5px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--label-secondary);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out), transform 100ms var(--ease-out);
+}
+
+.filter-chip:active {
+  transform: scale(0.95);
+}
+
+.filter-chip[data-active="true"] {
+  background: var(--control);
+  color: var(--control-label);
+  border-color: transparent;
+}
+
+.filter-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--label) 28%, transparent);
+}
+
+/* 多选模式：勾选圈 */
+.select-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--label-tertiary);
+  color: transparent;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out), transform 140ms var(--ease-bounce);
+}
+
+.select-circle[data-checked="true"] {
+  background: var(--label);
+  border-color: var(--label);
+  color: var(--bg);
+  transform: scale(1.05);
+}
+
+/* 下拉刷新指示器 */
+.ptr-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* 验证码芯片：一键复制 */
+.otp-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0.5px solid var(--hairline-bright);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--label);
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  transition: transform 100ms var(--ease-out), background 160ms var(--ease-out),
+    border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.otp-chip:active {
+  transform: scale(0.95);
+}
+
+.otp-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--label) 28%, transparent);
+}
+
+.otp-chip-icon {
+  display: inline-flex;
+  color: var(--label-secondary);
+}
+
+.otp-chip[data-copied="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+}
+
+.otp-chip[data-copied="true"] .otp-chip-icon {
+  color: var(--green);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .otp-chip:hover {
+    border-color: var(--label-tertiary);
+  }
+}
+
+/* 通道类型芯片 */
+.chip {
+  appearance: none;
+  border: 0.5px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--label);
+  padding: 0.5rem 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 100ms var(--ease-out), background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
+}
+
+.chip:active {
+  transform: scale(0.95);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--label) 28%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover {
+    border-color: var(--hairline-bright);
+    background: var(--fill-secondary);
+  }
+}
+
+/* 加号旋转 45° 变关闭 */
+.picker-toggle-icon {
+  transition: transform 240ms var(--ease-drawer);
+}
+
+.picker-toggle[aria-expanded="true"] .picker-toggle-icon {
+  transform: rotate(45deg);
+}
+
+/* 空状态：延续登录页的顶部径向光晕签名，更弱强度 */
+.empty-state {
+  position: relative;
   overflow: hidden;
 }
 
-.signal-fill {
-  height: 100%;
-  border-radius: inherit;
-  transition: width 400ms var(--ease-out);
+.empty-state::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 75% 55% at 50% 0%,
+    color-mix(in srgb, var(--label) 4%, transparent),
+    transparent 72%
+  );
 }
 
-.signal-excellent,
-.signal-good {
-  background: var(--signal-excellent);
+/* iOS 离散信号格 */
+.signal-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 0.85rem;
+  width: 1.35rem;
 }
-.signal-fair {
-  background: var(--signal-fair);
+
+.signal-bar {
+  flex: 1;
+  border-radius: 1.5px;
+  transition: background 400ms var(--ease-out);
 }
-.signal-poor {
-  background: var(--signal-poor);
-}
-.signal-none {
-  background: var(--signal-none);
-}
+
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -864,6 +1179,7 @@ select.field {
   border-radius: 999px;
 }
 
+/* 温和降级：去位移/缩放/弹跳，保留短促淡入以维持状态可读性 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -872,6 +1188,28 @@ select.field {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .page-enter,
+  .message-enter,
+  .stagger > *,
+  .modal,
+  .modal-scrim,
+  .toast {
+    animation: fade 160ms ease both !important;
+    animation-delay: 0ms !important;
+  }
+
+  .toast,
+  .app-top,
+  .app-top-title,
+  .disclosure-content {
+    transition: opacity 160ms ease !important;
+    transform: none !important;
+  }
+
+  .spinner {
+    animation: spin 0.65s linear infinite !important;
   }
 }
 
@@ -898,10 +1236,32 @@ select.field {
 }
 
 @media (hover: hover) and (pointer: fine) {
+  /* 次级按钮：悬停加深填充；主/危险按钮：轻微降不透明度（黑白实心无法提亮） */
+  .btn:not(:disabled):hover {
+    background: var(--fill);
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--control);
+    opacity: 0.88;
+  }
+  .btn-danger:not(:disabled):hover {
+    background: var(--red);
+    opacity: 0.88;
+  }
   .btn-ghost:hover {
+    opacity: 1;
     background: var(--fill-tertiary);
   }
   .msg-card:hover {
     border-color: var(--hairline-bright);
+  }
+  /* 删除按钮桌面端默认隐藏，悬停卡片时淡入 */
+  .msg-card .msg-delete {
+    opacity: 0;
+    transition: opacity 160ms var(--ease-out);
+  }
+  .msg-card:hover .msg-delete,
+  .msg-card:focus-within .msg-delete {
+    opacity: 1;
   }
 }

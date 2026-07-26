@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { PasswordInput } from "./PasswordInput";
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
     value: string,
   ) => void;
   onSubmit: () => void;
+  onExportConfig: () => void;
+  onImportConfig: (file: File) => void;
 };
 
 export function SecurityPanel({
@@ -23,8 +26,12 @@ export function SecurityPanel({
   changing,
   onChange,
   onSubmit,
+  onExportConfig,
+  onImportConfig,
 }: Props) {
+  const fileRef = useRef<HTMLInputElement>(null);
   return (
+    <div className="flex flex-col gap-4">
     <div className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)] p-4">
       <div className="mb-4">
         <h3 className="headline">管理密码</h3>
@@ -83,6 +90,39 @@ export function SecurityPanel({
           {changing ? "修改中…" : "更新密码"}
         </button>
       </div>
+    </div>
+
+    <div className="rounded-[var(--radius-lg)] bg-[var(--fill-tertiary)] p-4">
+      <div className="mb-4">
+        <h3 className="headline">配置备份</h3>
+        <p className="footnote mt-1">
+          导出当前配置文件，或从备份恢复（含推送通道密钥，请妥善保管）。
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" className="btn flex-1" onClick={onExportConfig}>
+          导出配置
+        </button>
+        <button
+          type="button"
+          className="btn flex-1"
+          onClick={() => fileRef.current?.click()}
+        >
+          导入配置
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".toml"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onImportConfig(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </div>
     </div>
   );
 }

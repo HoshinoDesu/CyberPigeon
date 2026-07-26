@@ -5,16 +5,19 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/HoshinoDesu/CyberPigeon/internal/config"
 	"github.com/HoshinoDesu/CyberPigeon/internal/forwarder"
 	"github.com/HoshinoDesu/CyberPigeon/internal/modem"
@@ -157,6 +160,8 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	mux.HandleFunc("/api/settings", s.withAPIAuth(s.handleSettings))
 	mux.HandleFunc("/api/settings/save", s.withAPIAuth(s.handleSaveSettings))
+	mux.HandleFunc("/api/config/export", s.withAPIAuth(s.handleConfigExport))
+	mux.HandleFunc("/api/config/import", s.withAPIAuth(s.handleConfigImport))
 
 	// 静态文件 - 使用 web 子目录
 	webFS, err := fs.Sub(webFiles, "web")
@@ -226,7 +231,7 @@ func (s *Server) handleModems(w http.ResponseWriter, r *http.Request) {
 	infos := make([]ModemInfo, 0, len(modems))
 
 	s.cfgMu.RLock()
-	cfg := s.cfg
+	cfg := s.cfg.Clone()
 	s.cfgMu.RUnlock()
 
 	for _, modem := range modems {
@@ -389,12 +394,24 @@ func (s *Server) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID string `json:"id"`
+		ID  string   `json:"id"`
+		IDs []string `json:"ids"`
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// 批量删除
+	if len(req.IDs) > 0 {
+		deleted, err := s.storage.DeleteMany(req.IDs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]any{"success": true, "deleted": deleted})
 		return
 	}
 
@@ -716,6 +733,71 @@ func (s *Server) BroadcastMessage(msg storage.Message) {
 	}
 }
 
+// handleConfigExport 下载当前配置文件
+func (s *Server) handleConfigExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.cfgMu.RLock()
+	data, err := os.ReadFile(s.configPath)
+	s.cfgMu.RUnlock()
+	if err != nil {
+		http.Error(w, "读取配置失败: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/toml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="cyberpigeon-config.toml"`)
+	_, _ = w.Write(data)
+}
+
+// handleConfigImport 导入配置文件：先解析校验，再写盘并热加载
+func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "读取请求失败: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var next config.Config
+	if err := toml.Unmarshal(data, &next); err != nil {
+		http.Error(w, "配置解析失败: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 通道配置先热重载验证有效性，避免写入无法工作的配置
+	if err := s.forwarder.ReloadChannels(next.Channels); err != nil {
+		http.Error(w, "通道配置无效: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.cfgMu.Lock()
+	// 保留运行中的 server 段（listen/origins 改动需重启才生效，且不可远程改掉自己的监听）
+	next.Server = s.cfg.Server
+	next.Storage = s.cfg.Storage
+	*s.cfg = *next.Clone()
+	saveErr := s.cfg.Save(s.configPath)
+	s.cfgMu.Unlock()
+	if saveErr != nil {
+		http.Error(w, "保存配置失败: "+saveErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.forwarder.UpdateMessageTemplate(next.DeviceName, next.DeviceNameInTitle, next.DeviceNameInBody)
+	s.forwarder.UpdateModemConfig(next.Modems, next.AlwaysOnModems)
+	s.forwarder.UpdateForwardRules(next.ForwardRules)
+
+	writeJSON(w, map[string]bool{"success": true})
+}
+
 // handleSettings 处理获取系统设置请求
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -730,6 +812,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		"device_name_in_body":  s.cfg.DeviceNameInBody,
 		"always_on_modems":     s.cfg.AlwaysOnModems,
 		"modems":               s.cfg.Modems,
+		"forward_rules":        s.cfg.ForwardRules,
 	}
 	s.cfgMu.RUnlock()
 	writeJSON(w, data)
@@ -744,14 +827,22 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		DeviceName        string               `json:"device_name"`
-		DeviceNameInTitle bool                  `json:"device_name_in_title"`
-		DeviceNameInBody  bool                  `json:"device_name_in_body"`
-		AlwaysOnModems    bool                  `json:"always_on_modems"`
-		Modems            []config.ModemConfig  `json:"modems"`
+		DeviceNameInTitle bool                 `json:"device_name_in_title"`
+		DeviceNameInBody  bool                 `json:"device_name_in_body"`
+		AlwaysOnModems    bool                 `json:"always_on_modems"`
+		Modems            []config.ModemConfig `json:"modems"`
+		ForwardRules      config.ForwardRules  `json:"forward_rules"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	switch strings.ToLower(strings.TrimSpace(req.ForwardRules.Mode)) {
+	case "", "off", "blacklist", "whitelist":
+	default:
+		http.Error(w, "Invalid forward_rules.mode", http.StatusBadRequest)
 		return
 	}
 
@@ -761,6 +852,7 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfg.DeviceNameInBody = req.DeviceNameInBody
 	s.cfg.AlwaysOnModems = req.AlwaysOnModems
 	s.cfg.Modems = append([]config.ModemConfig(nil), req.Modems...)
+	s.cfg.ForwardRules = req.ForwardRules
 
 	// 保存到配置文件
 	if err := s.cfg.Save(s.configPath); err != nil {
@@ -771,6 +863,7 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfgMu.Unlock()
 	s.forwarder.UpdateMessageTemplate(req.DeviceName, req.DeviceNameInTitle, req.DeviceNameInBody)
 	s.forwarder.UpdateModemConfig(req.Modems, req.AlwaysOnModems)
+	s.forwarder.UpdateForwardRules(req.ForwardRules)
 
 	writeJSON(w, map[string]bool{"success": true})
 }
