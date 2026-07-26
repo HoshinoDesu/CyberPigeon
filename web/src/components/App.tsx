@@ -880,8 +880,8 @@ export function App() {
             <div className="mx-auto max-w-[40rem]">
               <div className="mb-5">
                 <h1 className="display">设备</h1>
-                <p className="footnote mt-1">信号、本机名与 USSD</p>
               </div>
+              <p className="footnote mb-5">信号、本机名与 USSD</p>
               <DevicesPanel
                 modems={modems}
                 loading={modemsLoading}
@@ -901,8 +901,8 @@ export function App() {
             <div className="mx-auto max-w-[40rem]">
               <div className="mb-5">
                 <h1 className="display">推送</h1>
-                <p className="footnote mt-1">配置并测试通知通道</p>
               </div>
+              <p className="footnote mb-5">配置并测试通知通道</p>
               <ChannelsPanel
                 channels={channels}
                 loading={channelsLoading}
@@ -931,8 +931,8 @@ export function App() {
             <div className="mx-auto max-w-[28rem]">
               <div className="mb-5">
                 <h1 className="display">安全</h1>
-                <p className="footnote mt-1">管理控制台密码</p>
               </div>
+              <p className="footnote mb-5">管理控制台密码</p>
               <SecurityPanel
                 currentPassword={passwordForm.current_password}
                 newPassword={passwordForm.new_password}
