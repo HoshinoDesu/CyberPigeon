@@ -17,6 +17,7 @@
 
 - Sierra Wireless AirPrime® EM7430
 - Qualcomm Snapdragon® 410 UFI (UFI-001C,UFI003等)
+- DJI USB 4G Modem (Quectel EC25 Modules)
 
 ## 编译方法
 
